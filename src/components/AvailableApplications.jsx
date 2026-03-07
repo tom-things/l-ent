@@ -460,6 +460,24 @@ function getFavoriteApplications(sections) {
   return favorites
 }
 
+function buildAddFavoriteRequestPath(application, lastFavorite) {
+  const sourceId = getFirstText(application.portalNodeId)
+  const previousNodeId = getFirstText(lastFavorite?.portalNodeId) || ''
+
+  if (!sourceId) {
+    return ''
+  }
+
+  const params = new URLSearchParams({
+    action: 'movePortletAjax',
+    sourceId,
+    previousNodeId,
+    nextNodeId: '',
+  })
+
+  return `/api/layout?${params.toString()}`
+}
+
 function buildRemoveFavoriteRequestPath(application) {
   const sourceId = getFirstText(application.portalNodeId)
   const wrapperId = getFirstText(application.removeFavoriteTarget?.wrapperId)
@@ -571,6 +589,7 @@ function AvailableApplications() {
     originX: '24px',
     originY: '24px',
     application: null,
+    source: 'favorite',
   })
   const [allServices, setAllServices] = useState([])
   const [orderedFavorites, setOrderedFavorites] = useState([])
@@ -647,6 +666,7 @@ function AvailableApplications() {
         originX: '24px',
         originY: '24px',
         application: null,
+        source: 'favorite',
       })
     }
 
@@ -813,10 +833,11 @@ function AvailableApplications() {
       originX: '24px',
       originY: '24px',
       application: null,
+      source: 'favorite',
     })
   }
 
-  function handleFavoriteContextMenu(event, application) {
+  function handleFavoriteContextMenu(event, application, source = 'favorite') {
     event.preventDefault()
 
     const { x, y, originX, originY } = getContextMenuPosition(event)
@@ -828,6 +849,7 @@ function AvailableApplications() {
       originX,
       originY,
       application,
+      source,
     })
   }
 
@@ -1005,6 +1027,54 @@ function AvailableApplications() {
     }
   }
 
+  async function handleAddFavorite(application) {
+    const applicationKey = getApplicationKey(application)
+    const lastFavorite = orderedFavorites[orderedFavorites.length - 1]
+    const requestPath = buildAddFavoriteRequestPath(application, lastFavorite)
+
+    if (!requestPath) {
+      setFavoriteActionState({
+        removingKey: '',
+        error: "Impossible d'ajouter ce favori pour le moment.",
+      })
+      closeContextMenu()
+      return
+    }
+
+    setFavoriteActionState({
+      removingKey: applicationKey,
+      error: '',
+    })
+    closeContextMenu()
+
+    try {
+      const response = await requestEnt(requestPath, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json, text/javascript, */*; q=0.01',
+          Origin: ENT_ORIGIN,
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+      })
+      
+      if (!response.ok) {
+        throw new Error("Impossible d'ajouter ce favori pour le moment.")
+      }
+
+      setFavoriteActionState({
+        removingKey: '',
+        error: '',
+      })
+
+      setReloadKey((current) => current + 1)
+    } catch (error) {
+      setFavoriteActionState({
+        removingKey: '',
+        error: getErrorMessage(error),
+      })
+    }
+  }
+
   async function handleApplicationClick(event, application) {
     const launchKey = getApplicationKey(application)
     const resolvedLaunch = launchTargets[launchKey]
@@ -1126,7 +1196,7 @@ function AvailableApplications() {
                 onClickCapture={handleClickCapture}
                 onMouseEnter={() => warmApplicationLaunch(application)}
                 onFocus={() => warmApplicationLaunch(application)}
-                onContextMenu={(event) => handleFavoriteContextMenu(event, application)}
+                onContextMenu={(event) => handleFavoriteContextMenu(event, application, 'favorite')}
                 onClick={(event) => void handleApplicationClick(event, application)}
               >
                 <span
@@ -1172,19 +1242,24 @@ function AvailableApplications() {
           </div>
           <div className="app-drawer__grid">
             {allServices.map((service) => {
-              const resolvedLaunch = launchTargets[getApplicationKey(service)]
+              const applicationKey = getApplicationKey(service)
+              const resolvedLaunch = launchTargets[applicationKey]
               const href = resolvedLaunch?.href || service.href
               const target = resolvedLaunch?.target || service.target
+              const isBusy = favoriteActionState.removingKey === applicationKey
+              const isContextOpen = contextMenuState.open && getApplicationKey(contextMenuState.application ?? {}) === applicationKey
+              const isFavorite = orderedFavorites.some(f => getApplicationKey(f) === applicationKey)
 
               return (
                 <a
                   key={service.id}
-                  className="app-card"
+                  className={`app-card ${isBusy ? 'app-card--busy' : ''} ${isContextOpen ? 'app-card--context-open' : ''}`}
                   href={href}
                   target={target || undefined}
                   rel={target === '_blank' ? 'noreferrer' : undefined}
                   onMouseEnter={() => warmApplicationLaunch(service)}
                   onFocus={() => warmApplicationLaunch(service)}
+                  onContextMenu={(event) => handleFavoriteContextMenu(event, service, 'all')}
                   onClick={(event) => void handleApplicationClick(event, service)}
                 >
                   <span
@@ -1210,6 +1285,23 @@ function AvailableApplications() {
                       <span className="app-card__description">{service.description}</span>
                     ) : null}
                   </span>
+                  <button
+                    type="button"
+                    className={`app-card__action ${isFavorite ? 'app-card__action--is-favorite' : ''}`}
+                    aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                    onClick={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      if (isFavorite) {
+                        const targetApp = orderedFavorites.find(f => getApplicationKey(f) === applicationKey) || service
+                        void handleUnfavorite(targetApp)
+                      } else {
+                        void handleAddFavorite(service)
+                      }
+                    }}
+                  >
+                    <Icon icon={isFavorite ? 'carbon:star-filled' : 'carbon:star'} className="app-card__action-icon" aria-hidden="true" />
+                  </button>
                 </a>
               )
             })}
@@ -1217,12 +1309,22 @@ function AvailableApplications() {
         </div>
       ) : null}
 
-      {contextMenuState.open && contextMenuState.application ? (
+      {contextMenuState.open && contextMenuState.application ? (() => {
+        const applicationKey = getApplicationKey(contextMenuState.application)
+        const isFavorite = orderedFavorites.some(f => getApplicationKey(f) === applicationKey)
+        const isAddMode = !isFavorite && contextMenuState.source === 'all'
+        
+        // Find the actual application with remove limits if it's already a favorite
+        const targetApplication = isAddMode 
+          ? contextMenuState.application 
+          : (orderedFavorites.find(f => getApplicationKey(f) === applicationKey) || contextMenuState.application)
+
+        return (
         <div
           ref={contextMenuRef}
           className="favorites-context-menu"
           role="menu"
-          aria-label={`Actions pour ${contextMenuState.application.title}`}
+          aria-label={`Actions pour ${targetApplication.title}`}
           style={{
             top: `${contextMenuState.y}px`,
             left: `${contextMenuState.x}px`,
@@ -1230,17 +1332,29 @@ function AvailableApplications() {
             '--favorites-context-origin-y': contextMenuState.originY,
           }}
         >
-          <button
-            type="button"
-            className="favorites-context-menu__action"
-            role="menuitem"
-            onClick={() => void handleUnfavorite(contextMenuState.application)}
-          >
-            <Icon icon="carbon:close-outline" className="favorites-context-menu__action-icon" aria-hidden="true" />
-            <span>Retirer des favoris</span>
-          </button>
+          {isAddMode ? (
+            <button
+              type="button"
+              className="favorites-context-menu__action"
+              role="menuitem"
+              onClick={() => void handleAddFavorite(targetApplication)}
+            >
+              <Icon icon="carbon:star" className="favorites-context-menu__action-icon" aria-hidden="true" />
+              <span>Ajouter aux favoris</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="favorites-context-menu__action"
+              role="menuitem"
+              onClick={() => void handleUnfavorite(targetApplication)}
+            >
+              <Icon icon="carbon:close-outline" className="favorites-context-menu__action-icon" aria-hidden="true" />
+              <span>Retirer des favoris</span>
+            </button>
+          )}
         </div>
-      ) : null}
+      )})() : null}
     </section>
   )
 }
