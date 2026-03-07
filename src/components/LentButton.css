@@ -1,0 +1,28 @@
+.lent-button {
+  min-height: 47px;
+  padding: 15px 20px;
+  border: 0;
+  border-radius: 32px;
+  background: #003527;
+  color: #ffffff;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.06;
+  white-space: nowrap;
+  transition: background-color 120ms ease, opacity 120ms ease;
+}
+
+.lent-button:hover:not(:disabled) {
+  background: #002b1f;
+}
+
+.lent-button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+  box-shadow: none;
+}
+
+.lent-button__label {
+  display: block;
+}

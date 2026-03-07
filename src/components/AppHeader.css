@@ -1,0 +1,136 @@
+.app-header-shell {
+  width: 100%;
+  padding: 2.5rem 2.5rem 0;
+}
+
+.app-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.app-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.app-header__logo-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.app-header__logo {
+  display: block;
+  width: 290px;
+  height: 64px;
+  object-fit: contain;
+}
+
+.app-header__action-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.app-header__action-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+}
+
+.app-header__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-header__action--ghost {
+  background: transparent;
+  color: #003527;
+}
+
+.app-header__action--ghost:hover:not(:disabled) {
+  background: rgba(0, 53, 39, 0.1);
+}
+
+@media (max-width: 860px) {
+  .app-header-shell {
+    padding: 1.5rem 1rem 0;
+  }
+
+  .app-header {
+    flex-wrap: wrap;
+    gap: 0.9rem;
+  }
+
+  .app-header__logo {
+    width: 180px;
+    height: 48px;
+  }
+
+  .app-header__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-header-shell {
+    padding: 1.25rem 1rem 0;
+  }
+
+  .app-header {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: nowrap;
+  }
+
+  .app-header__logo-link {
+    align-self: flex-start;
+  }
+
+  .app-header__actions {
+    display: flex;
+    width: auto;
+    margin-left: auto;
+    justify-content: flex-end;
+    align-items: flex-start;
+    gap: 0.4rem;
+    flex-wrap: nowrap;
+  }
+
+  .app-header__action {
+    width: 47px;
+    min-width: 47px;
+    min-height: 47px;
+    padding: 0;
+    border-radius: 999px;
+  }
+
+  .app-header__action-content {
+    justify-content: center;
+    gap: 0;
+  }
+
+  .app-header__action-content > span:last-child {
+    display: none;
+  }
+
+  .app-header__action-icon {
+    width: 1.2rem;
+    height: 1.2rem;
+  }
+
+  .app-header__logo {
+    width: 200px;
+    height: auto;
+  }
+}
