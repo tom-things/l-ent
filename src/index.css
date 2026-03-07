@@ -6,6 +6,11 @@
   font-display: swap;
 }
 
+img {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
 :root {
   font-family: 'Satoshi Variable', Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   line-height: 1.5;

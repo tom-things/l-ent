@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '@iconify/react'
 import './AvailableApplications.css'
+import { getAppIcon } from '../assets/app_icons/uni_rennes'
 import {
   ENT_ORIGIN,
   buildEntProxyHref,
@@ -64,6 +65,38 @@ function getApplicationKey(application = {}) {
   return application.fname || application.id
 }
 
+const FAVORITES_ORDER_KEY = 'l-ent:favorites-order'
+
+function loadFavoritesOrder() {
+  try {
+    const stored = localStorage.getItem(FAVORITES_ORDER_KEY)
+    return stored ? JSON.parse(stored) : null
+  } catch {
+    return null
+  }
+}
+
+function saveFavoritesOrder(favorites) {
+  try {
+    const keys = favorites.map(getApplicationKey)
+    localStorage.setItem(FAVORITES_ORDER_KEY, JSON.stringify(keys))
+  } catch {}
+}
+
+function applyStoredOrder(favorites) {
+  const storedKeys = loadFavoritesOrder()
+  if (!storedKeys || storedKeys.length === 0) {
+    return favorites
+  }
+
+  const keyToIndex = new Map(storedKeys.map((key, i) => [key, i]))
+  return [...favorites].sort((a, b) => {
+    const ai = keyToIndex.get(getApplicationKey(a)) ?? Infinity
+    const bi = keyToIndex.get(getApplicationKey(b)) ?? Infinity
+    return ai - bi
+  })
+}
+
 function getPortalNodeId(entry, metadata = {}) {
   return getFirstText(
     entry?.ID,
@@ -90,29 +123,33 @@ function toNavigableHref(value) {
   }
 }
 
-function isGenericIconSrc(value = '') {
-  const normalizedValue = String(value).trim().toLowerCase()
+const LETTER_COLORS = [
+  { bg: '#dbeafe', fg: '#2563eb' },
+  { bg: '#ede9fe', fg: '#7c3aed' },
+  { bg: '#fce7f3', fg: '#db2777' },
+  { bg: '#fee2e2', fg: '#dc2626' },
+  { bg: '#ffedd5', fg: '#ea580c' },
+  { bg: '#fef9c3', fg: '#ca8a04' },
+  { bg: '#dcfce7', fg: '#16a34a' },
+  { bg: '#ccfbf1', fg: '#0d9488' },
+  { bg: '#cffafe', fg: '#0891b2' },
+  { bg: '#e0e7ff', fg: '#4f46e5' },
+  { bg: '#f3e8ff', fg: '#9333ea' },
+  { bg: '#fae8ff', fg: '#c026d3' },
+  { bg: '#ffe4e6', fg: '#e11d48' },
+  { bg: '#fef3c7', fg: '#d97706' },
+  { bg: '#d1fae5', fg: '#059669' },
+  { bg: '#e0f2fe', fg: '#0284c7' },
+]
 
-  return normalizedValue.includes('/media/skins/icons/mobile/default')
-    || normalizedValue.includes('/resourceservingwebapp/rs/tango/')
-    || normalizedValue.includes('/categories/preferences-system.png')
-    || normalizedValue.includes('/mimetypes/text-html.png')
+function getLetterStyle(title = '') {
+  const letter = (title.trim()[0] || '?').toUpperCase()
+  const code = letter.charCodeAt(0)
+  return LETTER_COLORS[code % LETTER_COLORS.length]
 }
 
-function extractPortalPageIconUrls(pageHtml = '') {
-  const iconMap = new Map()
-  const stylePattern = /#Pluto_[^_\s]+_([^_\s]+)_[^_\s]+_app\s+\.portlet-icon\s*\{[\s\S]*?background-image:\s*url\((['"]?)([^)"']+)\2\)/gi
-
-  for (const match of pageHtml.matchAll(stylePattern)) {
-    const nodeId = match[1]?.trim()
-    const iconSrc = match[3]?.trim()
-
-    if (nodeId && iconSrc && !iconMap.has(nodeId)) {
-      iconMap.set(nodeId, iconSrc)
-    }
-  }
-
-  return iconMap
+function getAppLetter(title = '') {
+  return (title.trim()[0] || '?').toUpperCase()
 }
 
 function normalizeTarget(entry, metadata = {}) {
@@ -195,16 +232,6 @@ function normalizeServiceEntry(entry, metadata = {}, extra = {}) {
     id: getPortletKey(entry),
     fname: getFirstText(entry?.fname, metadata?.fname),
     portalNodeId: getFirstText(extra.portalNodeId, getPortalNodeId(entry, metadata)),
-    iconSrc: toNavigableHref(
-      getFirstText(
-        entry?.iconUrl,
-        metadata?.iconUrl,
-        entry?.parameters?.mobileIconUrl,
-        metadata?.parameters?.mobileIconUrl,
-        entry?.parameters?.iconUrl,
-        metadata?.parameters?.iconUrl,
-      ),
-    ),
     title,
     description: getFirstText(
       entry?.description,
@@ -344,6 +371,45 @@ function normalizeBootstrapSections(bootstrap) {
   }
 }
 
+function normalizeAllServices(bootstrap) {
+  const layoutData = bootstrap?.layout?.data
+  if (!isRecord(layoutData)) {
+    return []
+  }
+
+  const portletLookup = buildPortletLookup(layoutData, bootstrap?.layoutDoc?.data)
+  const serviceTabs = collectServiceSections(layoutData)
+  const allApps = []
+  const seenKeys = new Set()
+
+  for (const tab of serviceTabs) {
+    for (const section of tab.sections) {
+      if (isFavoritesLikeLabel(section.title)) {
+        continue
+      }
+
+      for (const service of section.services) {
+        const metadata = findPortletMetadata(service, portletLookup)
+        const app = normalizeServiceEntry(service, metadata, {
+          portalNodeId: getPortalNodeId(service, metadata),
+        })
+
+        if (!app) {
+          continue
+        }
+
+        const key = `${getApplicationKey(app)}-${app.href}`
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key)
+          allApps.push(app)
+        }
+      }
+    }
+  }
+
+  return allApps
+}
+
 function getErrorMessage(error) {
   const message = error instanceof Error ? error.message.trim() : String(error).trim()
 
@@ -435,35 +501,6 @@ function removeApplicationFromSections(sections, applicationKey) {
     .filter((section) => section.applications.length > 0)
 }
 
-function pickApplicationIcon(title = '') {
-  const normalizedTitle = title.toLowerCase()
-
-  if (normalizedTitle.includes('moodle') || normalizedTitle.includes('cours')) {
-    return 'carbon:education'
-  }
-
-  if (normalizedTitle.includes('mail') || normalizedTitle.includes('messag') || normalizedTitle.includes('zimbra')) {
-    return 'carbon:email'
-  }
-
-  if (normalizedTitle.includes('emploi du temps') || normalizedTitle.includes('agenda') || normalizedTitle.includes('calendar') || normalizedTitle.includes('edt')) {
-    return 'carbon:calendar'
-  }
-
-  if (normalizedTitle.includes('notes') || normalizedTitle.includes('result') || normalizedTitle.includes('grade')) {
-    return 'carbon:chart-line-data'
-  }
-
-  if (normalizedTitle.includes('bibli') || normalizedTitle.includes('library')) {
-    return 'carbon:book'
-  }
-
-  if (normalizedTitle.includes('drive') || normalizedTitle.includes('document') || normalizedTitle.includes('fichier')) {
-    return 'carbon:folder'
-  }
-
-  return 'carbon:application-web'
-}
 
 function isPlainLeftClick(event) {
   return event.button === 0
@@ -520,7 +557,6 @@ function AvailableApplications() {
     error: '',
   })
   const [reloadKey, setReloadKey] = useState(0)
-  const [favoriteIconUrls, setFavoriteIconUrls] = useState({})
   const [launchTargets, setLaunchTargets] = useState({})
   const [launchingKeys, setLaunchingKeys] = useState({})
   const [exitingFavoriteKeys, setExitingFavoriteKeys] = useState({})
@@ -536,29 +572,36 @@ function AvailableApplications() {
     originY: '24px',
     application: null,
   })
+  const [allServices, setAllServices] = useState([])
+  const [orderedFavorites, setOrderedFavorites] = useState([])
+  const [isDragging, setIsDragging] = useState(false)
   const launchRequestsRef = useRef(new Map())
-  const iconRequestsRef = useRef(new Map())
   const removalTimeoutsRef = useRef(new Map())
   const isMountedRef = useRef(true)
   const contextMenuRef = useRef(null)
+  const dragRef = useRef({ index: -1, didDrag: false })
+  const favoritesRowRef = useRef(null)
+  const flipRectsRef = useRef(new Map())
 
   const favoriteApplications = useMemo(
     () => getFavoriteApplications(viewState.sections),
     [viewState.sections],
   )
-  const shouldShowFavoriteRow = viewState.status === 'ready' && favoriteApplications.length > 0
+  const shouldShowFavoriteRow = viewState.status === 'ready' && orderedFavorites.length > 0
   const shouldHideFavoritesSection = viewState.status === 'empty'
     || (viewState.status === 'ready' && favoriteApplications.length === 0)
 
   useEffect(() => {
+    setOrderedFavorites(applyStoredOrder(favoriteApplications))
+  }, [favoriteApplications])
+
+  useEffect(() => {
     const launchRequests = launchRequestsRef.current
-    const iconRequests = iconRequestsRef.current
     const removalTimeouts = removalTimeoutsRef.current
 
     return () => {
       isMountedRef.current = false
       launchRequests.clear()
-      iconRequests.clear()
       for (const timeoutId of removalTimeouts.values()) {
         window.clearTimeout(timeoutId)
       }
@@ -638,67 +681,6 @@ function AvailableApplications() {
 
   useEffect(() => {
     let isCancelled = false
-    const applicationsNeedingIcons = favoriteApplications.filter((application) => {
-      const applicationKey = getApplicationKey(application)
-      const hasRealMetadataIcon = application.iconSrc && !isGenericIconSrc(application.iconSrc)
-      return application.portalNodeId
-        && !hasRealMetadataIcon
-        && !favoriteIconUrls[applicationKey]
-        && !iconRequestsRef.current.has(applicationKey)
-    })
-
-    if (applicationsNeedingIcons.length === 0) {
-      return undefined
-    }
-
-    const request = requestEnt('/f/services/normal/render.uP', {
-      headers: {
-        Accept: 'text/html, application/xhtml+xml;q=0.9, */*;q=0.8',
-      },
-    })
-      .then((pageResponse) => {
-        const pageIconUrls = extractPortalPageIconUrls(pageResponse?.text ?? '')
-
-        if (pageIconUrls.size === 0 || isCancelled || !isMountedRef.current) {
-          return
-        }
-
-        setFavoriteIconUrls((current) => {
-          const nextState = { ...current }
-          let hasChanged = false
-
-          for (const application of applicationsNeedingIcons) {
-            const applicationKey = getApplicationKey(application)
-            const rawIconSrc = pageIconUrls.get(application.portalNodeId)
-            const iconSrc = toNavigableHref(rawIconSrc)
-
-            if (iconSrc && !nextState[applicationKey]) {
-              nextState[applicationKey] = iconSrc
-              hasChanged = true
-            }
-          }
-
-          return hasChanged ? nextState : current
-        })
-      })
-      .catch(() => {})
-      .finally(() => {
-        for (const application of applicationsNeedingIcons) {
-          iconRequestsRef.current.delete(getApplicationKey(application))
-        }
-      })
-
-    for (const application of applicationsNeedingIcons) {
-      iconRequestsRef.current.set(getApplicationKey(application), request)
-    }
-
-    return () => {
-      isCancelled = true
-    }
-  }, [favoriteApplications, favoriteIconUrls])
-
-  useEffect(() => {
-    let isCancelled = false
 
     async function hydrateApplications() {
       try {
@@ -708,6 +690,9 @@ function AvailableApplications() {
         }
 
         const sections = normalizeBootstrapSections(bootstrap)
+        const services = normalizeAllServices(bootstrap)
+        setAllServices(services)
+
         if (sections.sections.length > 0) {
           setFavoriteActionState((current) => ({ ...current, error: '' }))
           setViewState({
@@ -844,6 +829,103 @@ function AvailableApplications() {
       originY,
       application,
     })
+  }
+
+  function snapshotPositions() {
+    const row = favoritesRowRef.current
+    if (!row) return
+    flipRectsRef.current.clear()
+    for (const child of row.children) {
+      const id = child.getAttribute('data-app-id')
+      if (id) {
+        flipRectsRef.current.set(id, child.getBoundingClientRect())
+      }
+    }
+  }
+
+  const animateFlip = useCallback(() => {
+    const row = favoritesRowRef.current
+    if (!row || flipRectsRef.current.size === 0) return
+
+    for (const child of row.children) {
+      const id = child.getAttribute('data-app-id')
+      const oldRect = flipRectsRef.current.get(id)
+      if (!oldRect) continue
+
+      const newRect = child.getBoundingClientRect()
+      const dx = oldRect.left - newRect.left
+      const dy = oldRect.top - newRect.top
+
+      if (dx === 0 && dy === 0) continue
+
+      child.style.transition = 'none'
+      child.style.transform = `translate(${dx}px, ${dy}px)`
+
+      requestAnimationFrame(() => {
+        child.style.transition = 'transform 200ms cubic-bezier(0.2, 0, 0, 1)'
+        child.style.transform = ''
+      })
+    }
+
+    flipRectsRef.current.clear()
+  }, [])
+
+  useLayoutEffect(() => {
+    animateFlip()
+  }, [orderedFavorites, animateFlip])
+
+  function handleDragStart(event, index) {
+    dragRef.current = { index, didDrag: false }
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', String(index))
+    setIsDragging(true)
+  }
+
+  function handleDragOver(event, index) {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    dragRef.current.didDrag = true
+
+    const fromIndex = dragRef.current.index
+    if (fromIndex === -1 || fromIndex === index) {
+      return
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect()
+    const midX = rect.left + rect.width / 2
+    const pastMid = fromIndex < index
+      ? event.clientX > midX
+      : event.clientX < midX
+
+    if (!pastMid) {
+      return
+    }
+
+    snapshotPositions()
+
+    setOrderedFavorites((current) => {
+      const next = [...current]
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(index, 0, moved)
+      return next
+    })
+    dragRef.current.index = index
+  }
+
+  function handleDragEnd() {
+    dragRef.current.index = -1
+    setIsDragging(false)
+    setOrderedFavorites((current) => {
+      saveFavoritesOrder(current)
+      return current
+    })
+  }
+
+  function handleClickCapture(event) {
+    if (dragRef.current.didDrag) {
+      event.preventDefault()
+      dragRef.current.didDrag = false
+    }
   }
 
   async function handleUnfavorite(application) {
@@ -1016,11 +1098,10 @@ function AvailableApplications() {
       ) : null}
 
       {shouldShowFavoriteRow ? (
-        <div className="favorites-strip__row">
-          {favoriteApplications.map((application) => {
+        <div className={`favorites-strip__row ${isDragging ? 'favorites-strip__row--dragging' : ''}`} ref={favoritesRowRef}>
+          {orderedFavorites.map((application, index) => {
             const applicationKey = getApplicationKey(application)
             const resolvedLaunch = launchTargets[applicationKey]
-            const iconSrc = favoriteIconUrls[applicationKey] || application.iconSrc || ''
             const href = resolvedLaunch?.href || application.href
             const target = resolvedLaunch?.target || application.target
             const isLaunching = Boolean(launchingKeys[applicationKey])
@@ -1028,40 +1109,46 @@ function AvailableApplications() {
             const isExitingFavorite = Boolean(exitingFavoriteKeys[applicationKey])
             const isContextOpen = contextMenuState.open
               && getApplicationKey(contextMenuState.application ?? {}) === applicationKey
-
             return (
               <a
                 key={application.id}
+                data-app-id={application.id}
                 className={`favorites-strip__item ${isLaunching ? 'favorites-strip__item--loading' : ''} ${(isRemovingFavorite || isExitingFavorite) ? 'favorites-strip__item--busy' : ''} ${isExitingFavorite ? 'favorites-strip__item--removing' : ''} ${isContextOpen ? 'favorites-strip__item--context-open' : ''}`}
                 href={href}
                 target={target || undefined}
                 rel={target === '_blank' ? 'noreferrer' : undefined}
                 aria-label={`Ouvrir ${application.title}`}
                 aria-busy={isLaunching || isRemovingFavorite || isExitingFavorite}
+                draggable="true"
+                onDragStart={(event) => handleDragStart(event, index)}
+                onDragOver={(event) => handleDragOver(event, index)}
+                onDragEnd={handleDragEnd}
+                onClickCapture={handleClickCapture}
                 onMouseEnter={() => warmApplicationLaunch(application)}
                 onFocus={() => warmApplicationLaunch(application)}
                 onContextMenu={(event) => handleFavoriteContextMenu(event, application)}
                 onClick={(event) => void handleApplicationClick(event, application)}
               >
-                <span className="favorites-strip__badge" aria-hidden="true">
+                <span
+                  className="favorites-strip__badge"
+                  aria-hidden="true"
+                  style={getAppIcon(application.title) ? undefined : { backgroundColor: getLetterStyle(application.title).bg, color: getLetterStyle(application.title).fg }}
+                >
                   {isLaunching ? (
                     <Icon
                       icon="carbon:renew"
                       className="favorites-strip__badge-icon favorites-strip__badge-icon--spinning"
                     />
-                  ) : iconSrc ? (
+                  ) : getAppIcon(application.title) ? (
                     <img
-                      src={iconSrc}
+                      src={getAppIcon(application.title)}
                       alt=""
                       className="favorites-strip__badge-image"
-                      loading="lazy"
-                      decoding="async"
                     />
                   ) : (
-                    <Icon
-                      icon={pickApplicationIcon(application.title)}
-                      className="favorites-strip__badge-icon"
-                    />
+                    <span className="favorites-strip__badge-letter">
+                      {getAppLetter(application.title)}
+                    </span>
                   )}
                 </span>
                 <span className="favorites-strip__item-name">
@@ -1075,6 +1162,59 @@ function AvailableApplications() {
 
       {favoriteActionState.error ? (
         <p className="favorites-strip__feedback-text">{favoriteActionState.error}</p>
+      ) : null}
+
+      {allServices.length > 0 ? (
+        <div className="app-drawer">
+          <div className="app-drawer__label">
+            <Icon icon="carbon:app-switcher" className="app-drawer__label-icon" aria-hidden="true" />
+            <span className="app-drawer__label-text">Toutes les applications</span>
+          </div>
+          <div className="app-drawer__grid">
+            {allServices.map((service) => {
+              const resolvedLaunch = launchTargets[getApplicationKey(service)]
+              const href = resolvedLaunch?.href || service.href
+              const target = resolvedLaunch?.target || service.target
+
+              return (
+                <a
+                  key={service.id}
+                  className="app-card"
+                  href={href}
+                  target={target || undefined}
+                  rel={target === '_blank' ? 'noreferrer' : undefined}
+                  onMouseEnter={() => warmApplicationLaunch(service)}
+                  onFocus={() => warmApplicationLaunch(service)}
+                  onClick={(event) => void handleApplicationClick(event, service)}
+                >
+                  <span
+                    className="app-card__icon"
+                    aria-hidden="true"
+                    style={getAppIcon(service.title) ? undefined : { backgroundColor: getLetterStyle(service.title).bg, color: getLetterStyle(service.title).fg }}
+                  >
+                    {getAppIcon(service.title) ? (
+                      <img
+                        src={getAppIcon(service.title)}
+                        alt=""
+                        className="app-card__icon-image"
+                      />
+                    ) : (
+                      <span className="app-card__icon-letter">
+                        {getAppLetter(service.title)}
+                      </span>
+                    )}
+                  </span>
+                  <span className="app-card__text">
+                    <span className="app-card__title">{service.title}</span>
+                    {service.description ? (
+                      <span className="app-card__description">{service.description}</span>
+                    ) : null}
+                  </span>
+                </a>
+              )
+            })}
+          </div>
+        </div>
       ) : null}
 
       {contextMenuState.open && contextMenuState.application ? (

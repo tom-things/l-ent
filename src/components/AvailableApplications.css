@@ -72,6 +72,15 @@
   animation: favorites-strip-item-remove 220ms cubic-bezier(0.32, 0, 0.67, 0) forwards;
 }
 
+.favorites-strip__item[draggable="true"] {
+  cursor: pointer;
+}
+
+.favorites-strip__row--dragging .favorites-strip__item:hover,
+.favorites-strip__row--dragging .favorites-strip__item:focus-visible {
+  background: transparent;
+}
+
 .favorites-strip__item--placeholder {
   min-width: 140px;
 }
@@ -104,6 +113,13 @@
   height: 100%;
   object-fit: contain;
   border-radius: inherit;
+}
+
+.favorites-strip__badge-letter {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
 }
 
 .favorites-strip__badge-icon--spinning {
@@ -307,4 +323,227 @@
     opacity: 0;
     transform: translateY(10px);
   }
+}
+
+/* All applications drawer */
+
+.app-drawer {
+  display: grid;
+  gap: 16px;
+  margin-top: 28px;
+  color: #003527;
+}
+
+.app-drawer__label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.app-drawer__label-icon {
+  width: 17px;
+  height: 17px;
+  color: #003527;
+  flex-shrink: 0;
+}
+
+.app-drawer__label-text {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.06;
+}
+
+.app-drawer__folders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px 24px;
+}
+
+/* Closed folder — iOS-style mini icon grid */
+
+.app-folder-closed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-folder-closed__icon-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  width: 72px;
+  height: 72px;
+  padding: 8px;
+  background: #f0f0f0;
+  border-radius: 18px;
+  overflow: hidden;
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.app-folder-closed:hover .app-folder-closed__icon-grid {
+  transform: scale(1.06);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.app-folder-closed__mini-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  background: #e4e4e4;
+  overflow: hidden;
+}
+
+.app-folder-closed__mini-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.app-folder-closed__mini-letter {
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  user-select: none;
+}
+
+.app-folder-closed__title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #003527;
+  line-height: 1.15;
+  max-width: 80px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Open folder — expanded card */
+
+.app-folder {
+  width: 100%;
+  background: #f8f8f8;
+  border-radius: 20px;
+  padding: 18px 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.app-folder__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.app-folder__header:hover .app-folder__title {
+  opacity: 0.7;
+}
+
+.app-folder__title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+  transition: opacity 120ms ease;
+}
+
+.app-folder__count {
+  font-size: 12px;
+  font-weight: 500;
+  color: #003527;
+  opacity: 0.4;
+  line-height: 1;
+}
+
+.app-folder__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+}
+
+.app-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-radius: 16px;
+  color: inherit;
+  text-decoration: none;
+  transition: background-color 120ms ease;
+}
+
+.app-card:hover,
+.app-card:focus-visible {
+  background: #f7f7f7;
+}
+
+.app-card:focus-visible {
+  outline: 2px solid rgba(0, 53, 39, 0.18);
+  outline-offset: 2px;
+}
+
+.app-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 57px;
+  height: 57px;
+  border-radius: 10px;
+  background: #eee;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.app-card__icon-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.app-card__icon-letter {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+}
+
+.app-card__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  max-width: 200px;
+}
+
+.app-card__title {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-card__description {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+  opacity: 0.65;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

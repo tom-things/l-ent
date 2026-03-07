@@ -8,6 +8,8 @@ import {
   getWeatherForQuery,
 } from '../weatherApi'
 
+const WEATHER_CITY_KEY = 'l-ent:weather-city'
+
 const INITIAL_WEATHER_STATE = {
   summary: 'Chargement météo...',
   location: 'Localisation...',
@@ -108,7 +110,10 @@ function WidgetContainer({
       setIsWeatherLoading(true)
 
       try {
-        const nextWeather = await getCurrentLocationWeather()
+        const storedCity = localStorage.getItem(WEATHER_CITY_KEY)
+        const nextWeather = storedCity
+          ? await getWeatherForQuery(storedCity)
+          : await getCurrentLocationWeather()
 
         if (isMounted) {
           setWeatherState(nextWeather)
@@ -181,6 +186,7 @@ function WidgetContainer({
   const handleUseCurrentPosition = useCallback(async () => {
     try {
       setLocationError('')
+      localStorage.removeItem(WEATHER_CITY_KEY)
       await loadCurrentWeather()
       setIsLocationPickerOpen(false)
     } catch (error) {
@@ -202,6 +208,7 @@ function WidgetContainer({
       setLocationError('')
       const nextWeather = await getWeatherForQuery(trimmedQuery)
       setWeatherState(nextWeather)
+      localStorage.setItem(WEATHER_CITY_KEY, trimmedQuery)
       setIsLocationPickerOpen(false)
     } catch (error) {
       setLocationError(getErrorMessage(error))
