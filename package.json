@@ -5,12 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "start": "node server.js",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
     "@iconify/react": "^6.0.2",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.2.1",
+    "http-proxy-middleware": "^3.0.5",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
