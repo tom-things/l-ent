@@ -23,6 +23,7 @@
   display: inline-flex;
   align-items: center;
   text-decoration: none;
+  min-width: 0;
 }
 
 .app-header__logo {

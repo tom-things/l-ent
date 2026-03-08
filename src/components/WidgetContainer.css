@@ -25,6 +25,7 @@
     opacity 320ms ease,
     transform 320ms ease;
   will-change: opacity, transform;
+  min-width: 0;
 }
 
 .widget-card--visible {
