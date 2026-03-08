@@ -4,6 +4,8 @@ import { defineConfig } from 'vite'
 
 const ENT_ORIGIN = 'https://services-numeriques.univ-rennes.fr'
 const CAS_ORIGIN = 'https://sso-cas.univ-rennes.fr'
+const PLANNING_ORIGIN = 'https://planning.univ-rennes1.fr'
+const PLANNING_SERVICE_URL = `${PLANNING_ORIGIN}/direct/myplanning.jsp`
 const DEFAULT_REFERER = `${ENT_ORIGIN}/f/services/normal/render.uP`
 const LOCAL_SESSION_COOKIE = 'ent_front_session'
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000
@@ -477,6 +479,110 @@ function clearLocalSessionCookie(res) {
   )
 }
 
+function parseIcalEvents(icalText) {
+  const events = []
+  const blocks = icalText.split('BEGIN:VEVENT')
+
+  for (let i = 1; i < blocks.length; i++) {
+    const block = blocks[i].split('END:VEVENT')[0]
+    const event = {}
+
+    const lines = block.replace(/\r\n /g, '').replace(/\r\n\t/g, '').split(/\r?\n/)
+
+    for (const line of lines) {
+      const separatorIndex = line.indexOf(':')
+      if (separatorIndex === -1) continue
+
+      const rawKey = line.slice(0, separatorIndex)
+      const value = line.slice(separatorIndex + 1)
+      const key = rawKey.split(';')[0].trim()
+
+      switch (key) {
+        case 'DTSTART':
+          event.start = parseIcalDate(value)
+          break
+        case 'DTEND':
+          event.end = parseIcalDate(value)
+          break
+        case 'SUMMARY':
+          event.summary = unescapeIcal(value)
+          break
+        case 'LOCATION':
+          event.location = unescapeIcal(value)
+          break
+        case 'DESCRIPTION':
+          event.description = unescapeIcal(value)
+          break
+        case 'UID':
+          event.uid = value.trim()
+          break
+        case 'CATEGORIES':
+          event.categories = value.trim()
+          break
+      }
+    }
+
+    if (event.start) {
+      events.push(event)
+    }
+  }
+
+  return events.sort((a, b) => (a.start || '').localeCompare(b.start || ''))
+}
+
+function parseIcalDate(value) {
+  const clean = value.trim().replace('Z', '')
+  if (clean.length >= 15) {
+    return `${clean.slice(0, 4)}-${clean.slice(4, 6)}-${clean.slice(6, 8)}T${clean.slice(9, 11)}:${clean.slice(11, 13)}:${clean.slice(13, 15)}Z`
+  }
+  if (clean.length >= 8) {
+    return `${clean.slice(0, 4)}-${clean.slice(4, 6)}-${clean.slice(6, 8)}`
+  }
+  return value.trim()
+}
+
+function unescapeIcal(value) {
+  return value
+    .replace(/\\n/g, '\n')
+    .replace(/\\,/g, ',')
+    .replace(/\\;/g, ';')
+    .replace(/\\\\/g, '\\')
+    .trim()
+}
+
+async function establishPlanningSession(jar) {
+  // 1. Get CAS service ticket for the planning service
+  const casLoginUrl = `${CAS_ORIGIN}/login?service=${encodeURIComponent(PLANNING_SERVICE_URL)}`
+  const casResult = await followRedirectChain(casLoginUrl, jar, {
+    headers: { Accept: 'text/html,application/xhtml+xml,*/*' },
+  })
+  await casResult.response.text()
+
+  // 2. Get the GWT strong name
+  const nocacheUrl = `${PLANNING_ORIGIN}/direct/gwtdirectplanning/gwtdirectplanning.nocache.js`
+  const nocacheResponse = await fetchWithJar(nocacheUrl, jar, {
+    headers: { Accept: '*/*' },
+    redirect: 'follow',
+  })
+  const nocacheJs = await nocacheResponse.text()
+
+  let strongName = ''
+  const match = nocacheJs.match(/='([A-F0-9]{32})'/i)
+    || nocacheJs.match(/'([A-F0-9]{32})'/i)
+  if (match) {
+    strongName = match[1]
+  }
+
+  const moduleBase = `${PLANNING_ORIGIN}/direct/gwtdirectplanning/`
+  const rpcHeaders = {
+    'Content-Type': 'text/x-gwt-rpc; charset=utf-8',
+    'X-GWT-Module-Base': moduleBase,
+    ...(strongName ? { 'X-GWT-Permutation': strongName } : {}),
+  }
+
+  return { moduleBase, strongName, rpcHeaders, casResult }
+}
+
 function createEntDevAuthPlugin() {
   const sessions = new Map()
 
@@ -559,6 +665,145 @@ function createEntDevAuthPlugin() {
         })
       } catch (error) {
         sendJson(res, 401, {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    })
+
+    middlewares.use('/__ent_auth/account', async (req, res, next) => {
+      if (req.method !== 'GET') {
+        next()
+        return
+      }
+
+      try {
+        const session = getSessionFromRequest(req, sessions)
+
+        if (!session) {
+          sendJson(res, 200, {
+            authenticated: false,
+            account: null,
+          })
+          return
+        }
+
+        const response = await fetchWithJar(`${ENT_ORIGIN}/api/v5-1/userinfo`, session.jar, {
+          headers: {
+            Accept: 'application/jwt, application/json, */*',
+            Referer: DEFAULT_REFERER,
+          },
+          redirect: 'follow',
+        })
+
+        const text = await response.text()
+
+        // The endpoint returns a JWT — decode the payload
+        const parts = text.split('.')
+        if (parts.length === 3) {
+          try {
+            const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'))
+            sendJson(res, 200, {
+              authenticated: true,
+              account: payload,
+            })
+            return
+          } catch {
+            // Fall through to raw text response
+          }
+        }
+
+        // If not a JWT, try to parse as JSON
+        let data = text
+        try {
+          data = text ? JSON.parse(text) : null
+        } catch {
+          // keep as text
+        }
+
+        sendJson(res, 200, {
+          authenticated: true,
+          account: data,
+        })
+      } catch (error) {
+        sendJson(res, 500, {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    })
+
+    middlewares.use('/__ent_auth/planning', async (req, res, next) => {
+      if (req.method !== 'GET') {
+        next()
+        return
+      }
+
+      try {
+        const session = getSessionFromRequest(req, sessions)
+
+        if (!session) {
+          sendJson(res, 200, { authenticated: false, events: null })
+          return
+        }
+
+        const planningSession = await establishPlanningSession(session.jar)
+        const { moduleBase, strongName, rpcHeaders } = planningSession
+        const rpcUrl = `${PLANNING_ORIGIN}/direct/gwtdirectplanning/MyPlanningClientServiceProxy`
+
+        // Fetch the actual compiled GWT module (try .cache.html, the usual GWT format)
+        const probeUrls = [
+          `${moduleBase}${strongName}.cache.html`,
+          `${moduleBase}${strongName}.cache.js`,
+          `${moduleBase}deferredjs/${strongName}/1.cache.js`,
+        ]
+        let cacheContent = ''
+        let cacheUrl = ''
+        for (const url of probeUrls) {
+          const r = await fetchWithJar(url, session.jar, {
+            headers: { Accept: '*/*' }, redirect: 'follow',
+          })
+          const text = await r.text()
+          if (text.length > 5000 && !text.includes('<!doctype') && !text.includes('Erreur')) {
+            cacheContent = text
+            cacheUrl = url
+            break
+          }
+        }
+
+        // Call method1login(long projectId, LoginRequest request)
+        const svc = 'com.adesoft.gwt.directplan.client.rpc.MyPlanningClientServiceProxy'
+        const policyHash = '2912ADA6C426CFB85D3ACABE4CE65F74'
+        const loginReqType = 'com.adesoft.gwt.core.client.rpc.data.LoginRequest/3705388826'
+
+        const results = {}
+
+        // LoginRequest needs N fields after type token. Try 5-10 null fields.
+        for (let n = 5; n <= 12; n++) {
+          const nullFields = Array(n).fill('0').join('|')
+          const p = `7|0|6|${moduleBase}|${policyHash}|${svc}|method1login|J|${loginReqType}|1|2|3|4|2|5|6|3|6|${nullFields}|`
+          const r = await fetchWithJar(rpcUrl, session.jar, {
+            method: 'POST', headers: rpcHeaders, body: p, redirect: 'follow',
+          })
+          const text = await r.text()
+          const tooFew = text.includes('Too few tokens')
+          const tooMany = text.includes('Too many tokens')
+          results[`${n}_nulls`] = {
+            tooFew,
+            tooMany,
+            response: text.slice(0, 500),
+          }
+          // If we got neither too few nor too many, we found the right count
+          if (!tooFew && !tooMany) break
+          // If too many, we overshot
+          if (tooMany) break
+        }
+
+        sendJson(res, 200, {
+          authenticated: true,
+          events: [],
+          debug: { strongName, policyHash, results },
+        })
+      } catch (error) {
+        sendJson(res, 500, {
           error: error instanceof Error ? error.message : String(error),
         })
       }

@@ -15,6 +15,8 @@ const PORT = process.env.PORT || 3000
 // ============================================================================
 const ENT_ORIGIN = 'https://services-numeriques.univ-rennes.fr'
 const CAS_ORIGIN = 'https://sso-cas.univ-rennes.fr'
+const PLANNING_ORIGIN = 'https://planning.univ-rennes1.fr'
+const PLANNING_SERVICE_URL = `${PLANNING_ORIGIN}/direct/myplanning.jsp`
 const DEFAULT_REFERER = `${ENT_ORIGIN}/f/services/normal/render.uP`
 const LOCAL_SESSION_COOKIE = 'ent_front_session'
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000
@@ -407,6 +409,81 @@ function getSessionFromRequest(req) {
 }
 
 // ============================================================================
+// ICAL PARSER
+// ============================================================================
+
+function parseIcalEvents(icalText) {
+  const events = []
+  const blocks = icalText.split('BEGIN:VEVENT')
+
+  for (let i = 1; i < blocks.length; i++) {
+    const block = blocks[i].split('END:VEVENT')[0]
+    const event = {}
+
+    const lines = block.replace(/\r\n /g, '').replace(/\r\n\t/g, '').split(/\r?\n/)
+
+    for (const line of lines) {
+      const separatorIndex = line.indexOf(':')
+      if (separatorIndex === -1) continue
+
+      const rawKey = line.slice(0, separatorIndex)
+      const value = line.slice(separatorIndex + 1)
+      const key = rawKey.split(';')[0].trim()
+
+      switch (key) {
+        case 'DTSTART':
+          event.start = parseIcalDate(value)
+          break
+        case 'DTEND':
+          event.end = parseIcalDate(value)
+          break
+        case 'SUMMARY':
+          event.summary = unescapeIcal(value)
+          break
+        case 'LOCATION':
+          event.location = unescapeIcal(value)
+          break
+        case 'DESCRIPTION':
+          event.description = unescapeIcal(value)
+          break
+        case 'UID':
+          event.uid = value.trim()
+          break
+        case 'CATEGORIES':
+          event.categories = value.trim()
+          break
+      }
+    }
+
+    if (event.start) {
+      events.push(event)
+    }
+  }
+
+  return events.sort((a, b) => (a.start || '').localeCompare(b.start || ''))
+}
+
+function parseIcalDate(value) {
+  const clean = value.trim().replace('Z', '')
+  if (clean.length >= 15) {
+    return `${clean.slice(0, 4)}-${clean.slice(4, 6)}-${clean.slice(6, 8)}T${clean.slice(9, 11)}:${clean.slice(11, 13)}:${clean.slice(13, 15)}Z`
+  }
+  if (clean.length >= 8) {
+    return `${clean.slice(0, 4)}-${clean.slice(4, 6)}-${clean.slice(6, 8)}`
+  }
+  return value.trim()
+}
+
+function unescapeIcal(value) {
+  return value
+    .replace(/\\n/g, '\n')
+    .replace(/\\,/g, ',')
+    .replace(/\\;/g, ';')
+    .replace(/\\\\/g, '\\')
+    .trim()
+}
+
+// ============================================================================
 // EXPRESS MIDDLEWARE AND ROUTES
 // ============================================================================
 
@@ -492,7 +569,191 @@ app.post('/__ent_auth/login', async (req, res) => {
   }
 })
 
-// 3. Logout Endpoint
+// 3. Account Info Endpoint
+app.get('/__ent_auth/account', async (req, res) => {
+  try {
+    const session = getSessionFromRequest(req)
+
+    if (!session) {
+      return res.status(200).json({
+        authenticated: false,
+        account: null,
+      })
+    }
+
+    const response = await fetchWithJar(`${ENT_ORIGIN}/api/v5-1/userinfo`, session.jar, {
+      headers: {
+        Accept: 'application/jwt, application/json, */*',
+        Referer: DEFAULT_REFERER,
+      },
+      redirect: 'follow',
+    })
+
+    const text = await response.text()
+
+    // The endpoint returns a JWT — decode the payload
+    const parts = text.split('.')
+    if (parts.length === 3) {
+      try {
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'))
+        return res.status(200).json({
+          authenticated: true,
+          account: payload,
+        })
+      } catch {
+        // Fall through to raw text response
+      }
+    }
+
+    // If not a JWT, try to parse as JSON
+    let data = text
+    try {
+      data = text ? JSON.parse(text) : null
+    } catch {
+      // keep as text
+    }
+
+    res.status(200).json({
+      authenticated: true,
+      account: data,
+    })
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+})
+
+// 4. Planning Endpoint
+app.get('/__ent_auth/planning', async (req, res) => {
+  try {
+    const session = getSessionFromRequest(req)
+
+    if (!session) {
+      return res.status(200).json({ authenticated: false, events: null })
+    }
+
+    // 1. Establish a planning session via CAS
+    const casLoginUrl = `${CAS_ORIGIN}/login?service=${encodeURIComponent(PLANNING_SERVICE_URL)}`
+    const casResult = await followRedirectChain(casLoginUrl, session.jar, {
+      headers: { Accept: 'text/html,application/xhtml+xml,*/*' },
+    })
+    await casResult.response.text()
+
+    // 2. Load GWT nocache.js to find the strong name (permutation)
+    let strongName = ''
+    const nocacheUrl = `${PLANNING_ORIGIN}/direct/gwtdirectplanning/gwtdirectplanning.nocache.js`
+    const nocacheResponse = await fetchWithJar(nocacheUrl, session.jar, {
+      headers: { Accept: '*/*' },
+      redirect: 'follow',
+    })
+    const nocacheJs = await nocacheResponse.text()
+
+    const strongNameMatch = nocacheJs.match(/='([A-F0-9]{32})'/i)
+      || nocacheJs.match(/\$strongName\s*=\s*'([A-F0-9]{32})'/i)
+      || nocacheJs.match(/'([A-F0-9]{32})'/i)
+    if (strongNameMatch) {
+      strongName = strongNameMatch[1]
+    }
+
+    // 3. Fetch serialization policy
+    let policyText = ''
+    if (strongName) {
+      const policyUrl = `${PLANNING_ORIGIN}/direct/gwtdirectplanning/${strongName}.gwt.rpc`
+      const policyResponse = await fetchWithJar(policyUrl, session.jar, {
+        headers: { Accept: '*/*' },
+        redirect: 'follow',
+      })
+      policyText = await policyResponse.text()
+    }
+
+    // 4. Probe the GWT RPC endpoint
+    const rpcUrl = `${PLANNING_ORIGIN}/direct/gwtdirectplanning/MyPlanningClientServiceProxy`
+    const moduleBase = `${PLANNING_ORIGIN}/direct/gwtdirectplanning/`
+    const rpcHeaders = {
+      'Content-Type': 'text/x-gwt-rpc; charset=utf-8',
+      'X-GWT-Module-Base': moduleBase,
+      ...(strongName ? { 'X-GWT-Permutation': strongName } : {}),
+    }
+
+    const probePayload = `7|0|4|${moduleBase}|${strongName}|com.adesoft.gwt.directplan.client.rpc.MyPlanningClientServiceProxy|method|1|2|3|4|0|`
+    const rpcResponse = await fetchWithJar(rpcUrl, session.jar, {
+      method: 'POST',
+      headers: rpcHeaders,
+      body: probePayload,
+      redirect: 'follow',
+    })
+    const rpcText = await rpcResponse.text()
+
+    // 5. Try the standard JSP interface to find resource IDs
+    const stdUrl = `${PLANNING_ORIGIN}/jsp/standard/gui/interface.jsp`
+    const stdResponse = await fetchWithJar(stdUrl, session.jar, {
+      headers: { Accept: 'text/html,*/*' },
+      redirect: 'follow',
+    })
+    const stdHtml = await stdResponse.text()
+
+    const projectMatch = stdHtml.match(/projectId[=:]\s*["']?(\d+)/i)
+      || stdHtml.match(/idProject[=:]\s*["']?(\d+)/i)
+    const resourceMatches = stdHtml.match(/resources?[=:]\s*["']?([\d,]+)/gi) ?? []
+    const dataMatches = stdHtml.match(/data=([a-f0-9]+)/gi) ?? []
+    const checkMatches = stdHtml.match(/check\(\s*(\d+)/gi) ?? []
+
+    // If we found resource IDs, try iCal
+    let icalText = ''
+    const today = new Date()
+    const firstDate = new Date(today)
+    firstDate.setDate(firstDate.getDate() - firstDate.getDay() + 1)
+    const lastDate = new Date(firstDate)
+    lastDate.setDate(lastDate.getDate() + 27)
+    const formatDate = (d) => d.toISOString().split('T')[0]
+
+    if (checkMatches.length > 0) {
+      const resourceIds = checkMatches.map((m) => m.match(/\d+/)?.[0]).filter(Boolean)
+      const projectId = projectMatch ? projectMatch[1] : '3'
+      const calUrl = `${PLANNING_ORIGIN}/jsp/custom/modules/plannings/anonymous_cal.jsp?resources=${resourceIds.join(',')}&projectId=${projectId}&calType=ical&firstDate=${formatDate(firstDate)}&lastDate=${formatDate(lastDate)}`
+
+      const calResponse = await fetchWithJar(calUrl, session.jar, {
+        headers: { Accept: 'text/calendar, */*' },
+        redirect: 'follow',
+      })
+      icalText = await calResponse.text()
+    }
+
+    if (icalText && icalText.includes('BEGIN:VCALENDAR')) {
+      return res.status(200).json({
+        authenticated: true,
+        events: parseIcalEvents(icalText),
+      })
+    }
+
+    // Return debug info
+    res.status(200).json({
+      authenticated: true,
+      events: [],
+      debug: {
+        finalUrl: casResult.finalUrl,
+        strongName: strongName || null,
+        policyLength: policyText.length,
+        rpcStatus: rpcResponse.status,
+        rpcResponse: rpcText.slice(0, 1000),
+        stdInterfaceStatus: stdResponse.status,
+        stdSnippet: stdHtml.slice(0, 1500),
+        projectMatch: projectMatch?.[0] ?? null,
+        resourceMatches,
+        dataMatches,
+        checkMatches,
+        planningCookies: session.jar.getCookieNamesForHost('planning.univ-rennes1.fr'),
+      },
+    })
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+})
+
+// 5. Logout Endpoint
 app.post('/__ent_auth/logout', (req, res) => {
   const session = getSessionFromRequest(req)
   if (session) {

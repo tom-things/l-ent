@@ -6,9 +6,11 @@ import LentButton from './components/LentButton'
 import LoginPage from './components/LoginPage'
 import WidgetContainer from './components/WidgetContainer'
 import {
+  getAccountInfo,
   getAuthSession,
   getLayout,
   getMarketplaceEntries,
+  getPlanning,
   loginToEnt,
   logoutFromEnt,
   requestEnt,
@@ -118,6 +120,7 @@ function App() {
     checking: true,
     authenticated: false,
     user: null,
+    givenName: null,
     error: '',
   })
   const [hasCheckedInitialSession, setHasCheckedInitialSession] = useState(false)
@@ -157,10 +160,22 @@ function App() {
 
     try {
       const session = await getAuthSession()
+      let givenName = null
+
+      if (session.authenticated) {
+        try {
+          const account = await getAccountInfo()
+          givenName = account.account?.given_name ?? null
+        } catch {
+          // Account info is best-effort
+        }
+      }
+
       setSessionState({
         checking: false,
         authenticated: Boolean(session.authenticated),
         user: session.user ?? null,
+        givenName,
         error: '',
       })
 
@@ -176,6 +191,7 @@ function App() {
         checking: false,
         authenticated: false,
         user: null,
+        givenName: null,
         error: message,
       })
 
@@ -293,6 +309,7 @@ function App() {
         checking: false,
         authenticated: false,
         user: null,
+        givenName: null,
         error: message,
       })
       commitDebugState('Connexion', null, message)
@@ -318,6 +335,7 @@ function App() {
         checking: false,
         authenticated: false,
         user: null,
+        givenName: null,
         error: '',
       })
       commitDebugState('Deconnexion', result)
@@ -383,7 +401,7 @@ function App() {
           />
           <div className="blank-surface">
             <WidgetContainer
-              userName={sessionState.user}
+              userName={sessionState.givenName ?? sessionState.user}
               isSessionReady={!sessionState.checking}
             />
           </div>
@@ -490,10 +508,26 @@ function App() {
               <button
                 type="button"
                 className="debug-control-button debug-control-button--ghost"
+                onClick={() => void runDebugAction('Account', () => getAccountInfo())}
+                disabled={debugState.loading}
+              >
+                Account
+              </button>
+              <button
+                type="button"
+                className="debug-control-button debug-control-button--ghost"
                 onClick={() => void runDebugAction('Layout', () => getLayout())}
                 disabled={debugState.loading}
               >
                 Layout
+              </button>
+              <button
+                type="button"
+                className="debug-control-button debug-control-button--ghost"
+                onClick={() => void runDebugAction('Planning', () => getPlanning())}
+                disabled={debugState.loading}
+              >
+                Planning
               </button>
               <button
                 type="button"

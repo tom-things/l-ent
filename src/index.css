@@ -12,7 +12,7 @@ img {
 }
 
 :root {
-  font-family: 'Satoshi Variable', Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Satoshi Variable', Satoshi, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   line-height: 1.5;
   font-weight: 400;
   font-synthesis: none;

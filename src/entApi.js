@@ -193,8 +193,24 @@ function unwrapSettledResult(result) {
   }
 }
 
+export async function getPlanning() {
+  const response = await fetch(`${ENT_AUTH_PREFIX}/planning`, {
+    credentials: 'same-origin',
+  })
+
+  return parseJsonPayload(response)
+}
+
 export function getLayout(auth) {
   return requestEnt('/api/v4-3/dlm/layout.json', { auth })
+}
+
+export async function getAccountInfo() {
+  const response = await fetch(`${ENT_AUTH_PREFIX}/account`, {
+    credentials: 'same-origin',
+  })
+
+  return parseJsonPayload(response)
 }
 
 export function getLayoutDoc(auth, tab) {
