@@ -2,7 +2,7 @@
   display: flex;
   width: 100%;
   min-height: 100vh;
-  background: #ffffff;
+  background: var(--color-bg);
 }
 
 .login-page__illustration {
@@ -27,7 +27,7 @@
   display: flex;
   justify-content: center;
   align-items: stretch;
-  background: #ffffff;
+  background: var(--color-bg);
 }
 
 .login-page__panel-frame {
@@ -62,14 +62,14 @@
   gap: 10px;
   width: fit-content;
   padding: 10px 15px;
-  border: 1px solid rgba(27, 27, 27, 0.16);
+  border: 1px solid var(--color-border-input);
   border-radius: 53px;
-  background: #fbfbfb;
+  background: var(--color-bg-input);
   overflow: hidden;
 }
 
 .login-page__badge-text {
-  color: rgba(27, 27, 27, 0.6);
+  color: var(--color-text-muted);
   font-size: 16px;
   font-weight: 500;
   line-height: 1;
@@ -89,7 +89,7 @@
 
 .login-page__title {
   margin: 0;
-  color: #1b1b1b;
+  color: var(--color-text);
   font-size: 46px;
   font-weight: 700;
   line-height: 0.95;
@@ -97,7 +97,7 @@
 
 .login-page__description {
   margin: 0;
-  color: #1b1b1b;
+  color: var(--color-text);
   font-size: 16px;
   font-weight: 500;
   line-height: 1.06;
@@ -121,7 +121,7 @@
 
 .login-page__headline-title {
   margin: 0;
-  color: #003527;
+  color: var(--color-brand);
   font-size: 60px;
   font-weight: 700;
   line-height: 0.9;
@@ -148,10 +148,10 @@
   width: 100%;
   min-height: 56px;
   padding: 17px 18px;
-  border: 1px solid rgba(27, 27, 27, 0.16);
+  border: 1px solid var(--color-border-input);
   border-radius: 53px;
-  background: #fbfbfb;
-  color: #1b1b1b;
+  background: var(--color-bg-input);
+  color: var(--color-text);
   font: inherit;
   font-size: 16px;
   line-height: 1;
@@ -159,17 +159,17 @@
 }
 
 .login-page__input::placeholder {
-  color: rgba(27, 27, 27, 0.6);
+  color: var(--color-text-muted);
   opacity: 1;
 }
 
 .login-page__input:focus-visible {
-  border-color: #003527;
+  border-color: var(--color-brand);
 }
 
 .login-page__error {
   margin: 0;
-  color: #b91c1c;
+  color: var(--color-error);
   font-size: 14px;
   font-weight: 600;
 }
@@ -191,7 +191,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: #1b1b1b;
+  color: var(--color-text);
   font: inherit;
   font-size: 16px;
   font-weight: 500;
@@ -209,7 +209,7 @@
   justify-content: flex-end;
   gap: 8px 18px;
   max-width: min(420px, calc(100% - 96px));
-  color: rgba(27, 27, 27, 0.58);
+  color: var(--color-text-muted);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.1;

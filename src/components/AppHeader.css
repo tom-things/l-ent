@@ -53,11 +53,11 @@
 
 .app-header__action--ghost {
   background: transparent;
-  color: #003527;
+  color: var(--color-brand);
 }
 
 .app-header__action--ghost:hover:not(:disabled) {
-  background: rgba(0, 53, 39, 0.1);
+  background: var(--color-brand-subtle);
 }
 
 @media (max-width: 860px) {

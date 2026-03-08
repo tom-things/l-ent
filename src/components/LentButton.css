@@ -3,8 +3,8 @@
   padding: 15px 20px;
   border: 0;
   border-radius: 32px;
-  background: #003527;
-  color: #ffffff;
+  background: var(--color-brand);
+  color: var(--color-bg);
   font: inherit;
   font-size: 1rem;
   font-weight: 600;
@@ -14,7 +14,7 @@
 }
 
 .lent-button:hover:not(:disabled) {
-  background: #002b1f;
+  background: var(--color-brand-hover);
 }
 
 .lent-button:disabled {
