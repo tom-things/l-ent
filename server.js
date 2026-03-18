@@ -1,7 +1,7 @@
 import express from 'express'
 import cookieParser from 'cookie-parser'
 import { createProxyMiddleware } from 'http-proxy-middleware'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, createHmac } from 'node:crypto'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -20,8 +20,9 @@ const PLANNING_SERVICE_URL = `${PLANNING_ORIGIN}/direct/myplanning.jsp`
 const DEFAULT_REFERER = `${ENT_ORIGIN}/f/services/normal/render.uP`
 const LOCAL_SESSION_COOKIE = 'ent_front_session'
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000
-
-const sessions = new Map()
+// SESSION_SECRET must be set in production env vars (Render.com → Environment).
+// Without it, sessions will not survive server restarts.
+const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-only-insecure-secret'
 
 // Utility functions
 function escapeRegExp(value) {
@@ -161,10 +162,62 @@ class CookieJar {
       .map((cookie) => cookie.name)
       .sort((left, right) => left.localeCompare(right))
   }
+
+  serialize() {
+    return Array.from(this.store.entries())
+  }
+
+  static fromSerialized(entries) {
+    const jar = new CookieJar()
+    for (const [key, cookie] of entries ?? []) {
+      jar.store.set(key, cookie)
+    }
+    return jar
+  }
 }
 
 function resolveUrl(location, currentUrl) {
   return new URL(location, currentUrl).toString()
+}
+
+// ---------------------------------------------------------------------------
+// Stateless cookie-based sessions (survives server restarts)
+// ---------------------------------------------------------------------------
+function encodeSession(data) {
+  const payload = Buffer.from(JSON.stringify(data)).toString('base64url')
+  const sig = createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url')
+  return `${payload}.${sig}`
+}
+
+function decodeSession(cookieValue) {
+  if (!cookieValue) return null
+  const lastDot = cookieValue.lastIndexOf('.')
+  if (lastDot === -1) return null
+  const payload = cookieValue.slice(0, lastDot)
+  const sig = cookieValue.slice(lastDot + 1)
+  const expected = createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url')
+  if (sig !== expected) return null
+  try {
+    return JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8'))
+  } catch {
+    return null
+  }
+}
+
+function setSessionCookie(res, session) {
+  const data = {
+    id: session.id,
+    user: session.user,
+    jar: session.jar.serialize(),
+    createdAt: session.createdAt,
+  }
+  res.cookie(LOCAL_SESSION_COOKIE, encodeSession(data), {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+    secure: !!process.env.SESSION_SECRET,
+    maxAge: SESSION_TTL_MS,
+  })
 }
 
 function isRedirectStatus(statusCode) {
@@ -388,24 +441,15 @@ function buildEntProxyTargetUrl(requestUrl) {
 }
 
 function getSessionFromRequest(req) {
-  const sessionId = req.cookies[LOCAL_SESSION_COOKIE]
-
-  if (!sessionId) {
-    return null
+  const data = decodeSession(req.cookies[LOCAL_SESSION_COOKIE])
+  if (!data) return null
+  if (Date.now() - data.createdAt > SESSION_TTL_MS) return null
+  return {
+    id: data.id,
+    user: data.user,
+    jar: CookieJar.fromSerialized(data.jar),
+    createdAt: data.createdAt,
   }
-
-  const session = sessions.get(sessionId)
-  if (!session) {
-    return null
-  }
-
-  if (Date.now() - session.updatedAt > SESSION_TTL_MS) {
-    sessions.delete(sessionId)
-    return null
-  }
-
-  session.updatedAt = Date.now()
-  return session
 }
 
 // ============================================================================
@@ -523,7 +567,6 @@ app.get('/__ent_auth/session', async (req, res) => {
     const layout = await fetchEntLayout(session.jar)
 
     if (!layout.ok || !layout.data || String(layout.data.authenticated) !== 'true') {
-      sessions.delete(session.id)
       res.clearCookie(LOCAL_SESSION_COOKIE)
       return res.status(200).json({
         authenticated: false,
@@ -532,6 +575,7 @@ app.get('/__ent_auth/session', async (req, res) => {
     }
 
     session.user = layout.data.user
+    setSessionCookie(res, session)
 
     res.status(200).json({
       authenticated: true,
@@ -558,23 +602,13 @@ app.post('/__ent_auth/login', async (req, res) => {
     }
 
     const result = await performEntLogin({ username, password })
-    const sessionId = randomUUID()
-
-    sessions.set(sessionId, {
-      id: sessionId,
+    const session = {
+      id: randomUUID(),
       user: result.layout.user,
-      updatedAt: Date.now(),
       jar: result.jar,
-    })
-
-    // Secure=false in production IF not terminating TLS directly, but Render provides TLS.
-    // For universal support, we use standard cookie settings.
-    res.cookie(LOCAL_SESSION_COOKIE, sessionId, {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'Lax',
-      maxAge: SESSION_TTL_MS, 
-    })
+      createdAt: Date.now(),
+    }
+    setSessionCookie(res, session)
 
     res.status(200).json({
       authenticated: true,
@@ -614,6 +648,7 @@ app.get('/__ent_auth/account', async (req, res) => {
     if (parts.length === 3) {
       try {
         const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'))
+        setSessionCookie(res, session)
         return res.status(200).json({
           authenticated: true,
           account: payload,
@@ -631,6 +666,7 @@ app.get('/__ent_auth/account', async (req, res) => {
       // keep as text
     }
 
+    setSessionCookie(res, session)
     res.status(200).json({
       authenticated: true,
       account: data,
@@ -864,6 +900,7 @@ app.get('/__ent_auth/grades', async (req, res) => {
     let gradesData = null
     try { gradesData = JSON.parse(dataText) } catch { gradesData = dataText }
 
+    setSessionCookie(res, session)
     res.status(200).json({
       authenticated: true,
       grades: gradesData,
@@ -877,11 +914,6 @@ app.get('/__ent_auth/grades', async (req, res) => {
 
 // 7. Logout Endpoint
 app.post('/__ent_auth/logout', (req, res) => {
-  const session = getSessionFromRequest(req)
-  if (session) {
-    sessions.delete(session.id)
-  }
-
   res.clearCookie(LOCAL_SESSION_COOKIE)
   res.status(200).json({
     authenticated: false,
@@ -942,6 +974,7 @@ app.use('/__ent_proxy', createProxyMiddleware({
       if (session) {
         const targetUrl = buildEntProxyTargetUrl(req.url)
         session.jar.setFromProxySetCookie(proxyRes.headers['set-cookie'], targetUrl)
+        setSessionCookie(res, session)
       }
 
       delete proxyRes.headers['set-cookie']
