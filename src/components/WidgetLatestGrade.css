@@ -1,0 +1,129 @@
+.latest-grade-widget {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--color-brand);
+  background: var(--color-bg);
+  flex: 0 1 280px;
+  cursor: pointer;
+  position: relative;
+  transition:
+    opacity 320ms ease,
+    transform 320ms ease,
+    background-color 150ms ease;
+}
+
+.latest-grade-widget:hover {
+  background: var(--color-bg-subtle);
+}
+
+.latest-grade-widget__corner-arrow {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 14px;
+  height: 14px;
+  color: var(--color-brand);
+  opacity: 0;
+  transition: opacity 150ms ease;
+  flex-shrink: 0;
+}
+
+.latest-grade-widget:hover .latest-grade-widget__corner-arrow {
+  opacity: 0.45;
+}
+
+.latest-grade-widget--wide {
+  flex-basis: 360px;
+}
+
+.latest-grade-widget__label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.latest-grade-widget__label-icon {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  color: var(--color-brand);
+}
+
+.latest-grade-widget__content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  justify-content: flex-end;
+}
+
+.latest-grade-widget__placeholder {
+  opacity: 0.5;
+}
+
+.latest-grade-widget__score-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.latest-grade-widget__accent-bar {
+  width: 6px;
+  height: 39px;
+  background: #0073d1;
+  border-radius: 25px;
+  flex-shrink: 0;
+}
+
+.latest-grade-widget__score {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  line-height: 1.06;
+}
+
+.latest-grade-widget__score-value {
+  font-size: 37px;
+  font-weight: 700;
+  line-height: 1.06;
+  white-space: nowrap;
+}
+
+.latest-grade-widget__score-max {
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1.06;
+  white-space: nowrap;
+  padding-bottom: 3px;
+}
+
+.latest-grade-widget__meta {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.latest-grade-widget__meta .widget-card__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.latest-grade-widget__code {
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .latest-grade-widget__score-value {
+    font-size: 32px;
+  }
+
+  .latest-grade-widget__score-max {
+    font-size: 17px;
+  }
+}

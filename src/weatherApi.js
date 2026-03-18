@@ -2,7 +2,7 @@ const WEATHER_API_URL = 'https://api.open-meteo.com/v1/forecast'
 const GEOCODING_API_URL = 'https://geocoding-api.open-meteo.com/v1'
 const REVERSE_GEOCODING_API_URL = 'https://nominatim.openstreetmap.org/reverse'
 const DEFAULT_FALLBACK_LOCATION = 'Rennes'
-const DEFAULT_GRADIENT_BOTTOM = '#fafafa'
+const DEFAULT_GRADIENT_BOTTOM = '#f7f7f5'
 
 function buildWeatherGradient(topColor, middleColor, lowerColor) {
   return `linear-gradient(180deg, ${topColor} 4.11%, ${middleColor} 35.01%, ${lowerColor} 69.27%, ${DEFAULT_GRADIENT_BOTTOM} 99.76%)`
@@ -59,8 +59,8 @@ function getWeatherDescriptor(weatherCode, isDay) {
       label: isDay ? 'Ensoleillé' : 'Dégagé',
       icon: dayPartlyCloudyIcon,
       gradient: isDay
-        ? buildWeatherGradient('#ffa1c0', '#f6ea00', '#dfffae')
-        : buildWeatherGradient('#c495ff', '#ff9fd7', '#ceff7c'),
+        ? buildWeatherGradient('#fce5b8', '#fdefd5', '#fdf5e8')
+        : buildWeatherGradient('#c8c0e8', '#d8d2f0', '#e8e4f5'),
     }
   }
 
@@ -69,8 +69,8 @@ function getWeatherDescriptor(weatherCode, isDay) {
       label: 'Partiellement nuageux',
       icon: dayPartlyCloudyIcon,
       gradient: isDay
-        ? buildWeatherGradient('#ffb1d2', '#ffe63b', '#c8ff9d')
-        : buildWeatherGradient('#d49cff', '#ffb4dc', '#d5ff8a'),
+        ? buildWeatherGradient('#fad9c0', '#fce9d8', '#fdf3ec')
+        : buildWeatherGradient('#c4bce8', '#d4cef0', '#e6e2f5'),
     }
   }
 
@@ -78,7 +78,7 @@ function getWeatherDescriptor(weatherCode, isDay) {
     return {
       label: 'Couvert',
       icon: dayMostlyCloudyIcon,
-      gradient: buildWeatherGradient('#8cb4ff', '#b6f0ff', '#d9ff9c'),
+      gradient: buildWeatherGradient('#c8d8ec', '#d8e5f2', '#e8eff7'),
     }
   }
 
@@ -86,7 +86,7 @@ function getWeatherDescriptor(weatherCode, isDay) {
     return {
       label: 'Brouillard',
       icon: 'carbon:cloudy',
-      gradient: buildWeatherGradient('#c5b4ff', '#ffdcb0', '#f0ffb8'),
+      gradient: buildWeatherGradient('#d4d0e4', '#dedad0', '#eae8ec'),
     }
   }
 
@@ -94,7 +94,7 @@ function getWeatherDescriptor(weatherCode, isDay) {
     return {
       label: 'Bruine',
       icon: 'carbon:cloudy',
-      gradient: buildWeatherGradient('#6c9dff', '#7ce1ff', '#d8ff8e'),
+      gradient: buildWeatherGradient('#c0d4ec', '#d0e2f2', '#e2edf7'),
     }
   }
 
@@ -102,7 +102,7 @@ function getWeatherDescriptor(weatherCode, isDay) {
     return {
       label: 'Pluie',
       icon: 'carbon:cloudy',
-      gradient: buildWeatherGradient('#4f7fff', '#61ccff', '#cfff6f'),
+      gradient: buildWeatherGradient('#b8ccec', '#c8daf0', '#dce8f5'),
     }
   }
 
@@ -110,7 +110,7 @@ function getWeatherDescriptor(weatherCode, isDay) {
     return {
       label: 'Neige',
       icon: 'carbon:cloudy',
-      gradient: buildWeatherGradient('#9de6ff', '#d5fbff', '#f1ffba'),
+      gradient: buildWeatherGradient('#d8eef8', '#e5f3fa', '#f0f8fc'),
     }
   }
 
@@ -118,14 +118,14 @@ function getWeatherDescriptor(weatherCode, isDay) {
     return {
       label: 'Orage',
       icon: 'carbon:cloudy',
-      gradient: buildWeatherGradient('#9c7aff', '#ff89cf', '#f3f05a'),
+      gradient: buildWeatherGradient('#c0b8e0', '#cec8e8', '#dedad0'),
     }
   }
 
   return {
     label: 'Conditions variables',
     icon: 'carbon:cloudy',
-    gradient: buildWeatherGradient('#ffb1d2', '#f6ea00', '#d8ff9a'),
+    gradient: buildWeatherGradient('#ccd8ec', '#d8e4f0', '#e8eef5'),
   }
 }
 
