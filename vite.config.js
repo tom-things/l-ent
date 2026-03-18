@@ -893,6 +893,49 @@ function createEntDevAuthPlugin() {
       }
     })
 
+    middlewares.use('/__ent_auth/grades', async (req, res, next) => {
+      if (req.method !== 'GET') {
+        next()
+        return
+      }
+
+      try {
+        const session = getSessionFromRequest(req, sessions)
+
+        if (!session) {
+          sendJson(res, 200, { authenticated: false, grades: null })
+          return
+        }
+
+        const NOTES9_ORIGIN = 'https://notes9.iutlan.univ-rennes1.fr'
+
+        // Authenticate via doAuth.php → CAS to establish a notes9 PHP session
+        const doAuthUrl = `${NOTES9_ORIGIN}/services/doAuth.php?href=${encodeURIComponent(`${NOTES9_ORIGIN}/`)}`
+        await followRedirectChain(doAuthUrl, session.jar, {
+          headers: { Accept: 'text/html,application/xhtml+xml,*/*' },
+        })
+
+        // Fetch all grades data in one request (auth + semesters + first relevé)
+        const dataUrl = `${NOTES9_ORIGIN}/services/data.php?q=dataPremi%C3%A8reConnexion`
+        const dataResponse = await fetchWithJar(dataUrl, session.jar, {
+          headers: { Accept: 'application/json, */*', Referer: `${NOTES9_ORIGIN}/` },
+          redirect: 'follow',
+        })
+        const dataText = await dataResponse.text()
+        let gradesData = null
+        try { gradesData = JSON.parse(dataText) } catch { gradesData = dataText }
+
+        sendJson(res, 200, {
+          authenticated: true,
+          grades: gradesData,
+        })
+      } catch (error) {
+        sendJson(res, 500, {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    })
+
     middlewares.use('/__ent_auth/logout', (req, res, next) => {
       if (req.method !== 'POST') {
         next()

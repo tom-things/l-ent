@@ -201,6 +201,72 @@ export async function getPlanning() {
   return parseJsonPayload(response)
 }
 
+const GRADES_CACHE_KEY = 'l-ent:grades-cache'
+const GRADES_CACHE_TTL_MS = 30 * 60 * 1000
+
+export async function getGrades({ force = false } = {}) {
+  if (!force) {
+    try {
+      const raw = localStorage.getItem(GRADES_CACHE_KEY)
+      if (raw) {
+        const cached = JSON.parse(raw)
+        if (cached?.data && Date.now() - cached.cachedAt < GRADES_CACHE_TTL_MS) {
+          return cached.data
+        }
+      }
+    } catch {
+      // ignore corrupt cache
+    }
+  }
+
+  const response = await fetch(`${ENT_AUTH_PREFIX}/grades`, {
+    credentials: 'same-origin',
+  })
+
+  const data = await parseJsonPayload(response)
+
+  try {
+    localStorage.setItem(GRADES_CACHE_KEY, JSON.stringify({ data, cachedAt: Date.now() }))
+  } catch {
+    // storage full
+  }
+
+  return data
+}
+
+export async function getLatestGrade() {
+  const data = await getGrades()
+  const releve = data.grades?.['relevé']
+  if (!releve) return { error: 'Aucun relevé disponible.' }
+
+  let latest = null
+
+  for (const sectionKey of ['ressources', 'saes']) {
+    const section = releve[sectionKey]
+    if (!section) continue
+    for (const [code, resource] of Object.entries(section)) {
+      for (const evaluation of resource.evaluations ?? []) {
+        const val = evaluation.note?.value
+        if (!evaluation.date || !val || val === 'abs' || val === 'EXC' || val === '~') continue
+        if (!latest || evaluation.date > latest.date) {
+          latest = {
+            date: evaluation.date,
+            description: evaluation.description || resource.titre || code,
+            note: val,
+            noteSur: evaluation.note?.max ?? '20',
+            noteMoy: evaluation.note?.moy ?? null,
+            resource: code,
+            resourceTitle: resource.titre ?? code,
+            coef: evaluation.coef ?? null,
+          }
+        }
+      }
+    }
+  }
+
+  return latest ?? { error: 'Aucune note trouvée.' }
+}
+
 export function getLayout(auth) {
   return requestEnt('/api/v4-3/dlm/layout.json', { auth })
 }

@@ -10,6 +10,8 @@ import WidgetContainer from './components/WidgetContainer'
 import {
   getAccountInfo,
   getAuthSession,
+  getGrades,
+  getLatestGrade,
   getLayout,
   getMarketplaceEntries,
   getPlanning,
@@ -607,6 +609,22 @@ function App() {
                 disabled={debugState.loading}
               >
                 Marketplace
+              </button>
+              <button
+                type="button"
+                className="debug-control-button debug-control-button--ghost"
+                onClick={() => void runDebugAction('Grades', () => getGrades())}
+                disabled={debugState.loading}
+              >
+                Grades
+              </button>
+              <button
+                type="button"
+                className="debug-control-button debug-control-button--ghost"
+                onClick={() => void runDebugAction('Latest Grade', () => getLatestGrade())}
+                disabled={debugState.loading}
+              >
+                Latest Grade
               </button>
             </div>
 

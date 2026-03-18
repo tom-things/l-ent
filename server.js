@@ -837,7 +837,45 @@ app.get('/__ent_auth/launch', async (req, res) => {
   }
 })
 
-// 6. Logout Endpoint
+// 6. Grades Endpoint (IUT Lannion — notes9)
+app.get('/__ent_auth/grades', async (req, res) => {
+  try {
+    const session = getSessionFromRequest(req)
+
+    if (!session) {
+      return res.status(200).json({ authenticated: false, grades: null })
+    }
+
+    const NOTES9_ORIGIN = 'https://notes9.iutlan.univ-rennes1.fr'
+
+    // Authenticate via doAuth.php → CAS to establish a notes9 PHP session
+    const doAuthUrl = `${NOTES9_ORIGIN}/services/doAuth.php?href=${encodeURIComponent(`${NOTES9_ORIGIN}/`)}`
+    await followRedirectChain(doAuthUrl, session.jar, {
+      headers: { Accept: 'text/html,application/xhtml+xml,*/*' },
+    })
+
+    // Fetch all grades data in one request (auth + semesters + first relevé)
+    const dataUrl = `${NOTES9_ORIGIN}/services/data.php?q=dataPremi%C3%A8reConnexion`
+    const dataResponse = await fetchWithJar(dataUrl, session.jar, {
+      headers: { Accept: 'application/json, */*', Referer: `${NOTES9_ORIGIN}/` },
+      redirect: 'follow',
+    })
+    const dataText = await dataResponse.text()
+    let gradesData = null
+    try { gradesData = JSON.parse(dataText) } catch { gradesData = dataText }
+
+    res.status(200).json({
+      authenticated: true,
+      grades: gradesData,
+    })
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+})
+
+// 7. Logout Endpoint
 app.post('/__ent_auth/logout', (req, res) => {
   const session = getSessionFromRequest(req)
   if (session) {

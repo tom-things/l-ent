@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Icon } from '@iconify/react'
 import AvailableApplications from './AvailableApplications'
+import WidgetLatestGrade from './WidgetLatestGrade'
 import './WidgetContainer.css'
 import {
   getCurrentLocationWeather,
@@ -14,7 +15,7 @@ const INITIAL_WEATHER_STATE = {
   summary: 'Chargement météo...',
   location: 'Localisation...',
   icon: 'carbon:cloudy',
-  gradient: 'linear-gradient(180deg, #ffb1d2 4.11%, #f6ea00 35.01%, #dfffae 69.27%, #fafafa 99.76%)',
+  gradient: 'linear-gradient(180deg, #fce5b8 4.11%, #fdefd5 35.01%, #fdf5e8 69.27%, #f7f7f5 99.76%)',
 }
 
 function getLoadingWeatherState(previousState) {
@@ -22,7 +23,7 @@ function getLoadingWeatherState(previousState) {
     summary: 'Chargement météo...',
     location: previousState?.location || 'Localisation...',
     icon: previousState?.icon || 'carbon:cloudy',
-    gradient: previousState?.gradient || INITIAL_WEATHER_STATE.gradient,
+    gradient: previousState?.gradient ?? INITIAL_WEATHER_STATE.gradient,
   }
 }
 
@@ -255,6 +256,10 @@ function WidgetContainer({
             </div>
           </div>
         </article>
+
+        {establishment === 'iutlan' ? (
+          <WidgetLatestGrade visible={areWidgetsVisible} />
+        ) : null}
       </div>
 
       <AvailableApplications establishment={establishment} />
