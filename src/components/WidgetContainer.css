@@ -73,6 +73,24 @@
   flex-shrink: 0;
 }
 
+.greeting-widget__icon svg {
+  transform-origin: 70% 70%;
+}
+
+.widget-card--visible .greeting-widget__icon svg {
+  animation: wave 1s ease-in-out 0.4s;
+}
+
+@keyframes wave {
+  0% { transform: rotate(0deg); }
+  15% { transform: rotate(14deg); }
+  30% { transform: rotate(-8deg); }
+  45% { transform: rotate(14deg); }
+  60% { transform: rotate(-4deg); }
+  75% { transform: rotate(10deg); }
+  100% { transform: rotate(0deg); }
+}
+
 .weather-widget {
   display: flex;
   padding: 0;

@@ -97,6 +97,27 @@ function applyStoredOrder(favorites) {
   })
 }
 
+const LOCAL_PINS_KEY = 'l-ent:local-pins'
+
+function loadLocalPins() {
+  try {
+    const stored = localStorage.getItem(LOCAL_PINS_KEY)
+    return stored ? JSON.parse(stored) : []
+  } catch {
+    return []
+  }
+}
+
+function saveLocalPins(pins) {
+  try {
+    localStorage.setItem(LOCAL_PINS_KEY, JSON.stringify(pins))
+  } catch {}
+}
+
+function isLocalService(application) {
+  return !application?.portalNodeId
+}
+
 function getPortalNodeId(entry, metadata = {}) {
   return getFirstText(
     entry?.ID,
@@ -119,7 +140,9 @@ function toNavigableHref(value) {
   try {
     return buildEntProxyHref(href)
   } catch {
-    return href
+    // External URL — route through the CAS launch endpoint so the
+    // server-side cookie jar can supply the TGC for SSO.
+    return `/__ent_auth/launch?url=${encodeURIComponent(href)}`
   }
 }
 
@@ -533,6 +556,18 @@ function navigateToApplication({ href, target }, preparedWindow = null) {
     return
   }
 
+  // Route all external _blank navigations through the CAS launch endpoint
+  // so the server-side TGC cookie is used for SSO.
+  let launchHref = href
+  if (target === '_blank') {
+    if (href.startsWith('/__ent_proxy')) {
+      const realUrl = ENT_ORIGIN + href.replace(/^\/__ent_proxy/, '')
+      launchHref = `/__ent_auth/launch?url=${encodeURIComponent(realUrl)}`
+    } else if (/^https?:\/\//i.test(href)) {
+      launchHref = `/__ent_auth/launch?url=${encodeURIComponent(href)}`
+    }
+  }
+
   if (target === '_blank') {
     if (preparedWindow && !preparedWindow.closed) {
       try {
@@ -541,15 +576,15 @@ function navigateToApplication({ href, target }, preparedWindow = null) {
         // Some browsers restrict opener writes; navigation still works without it.
       }
 
-      preparedWindow.location.assign(href)
+      preparedWindow.location.assign(launchHref)
       return
     }
 
-    window.open(href, '_blank', 'noopener,noreferrer')
+    window.open(launchHref, '_blank', 'noopener,noreferrer')
     return
   }
 
-  window.location.assign(href)
+  window.location.assign(launchHref)
 }
 
 function getContextMenuPosition(event) {
@@ -566,7 +601,7 @@ function getContextMenuPosition(event) {
   }
 }
 
-function AvailableApplications() {
+function AvailableApplications({ establishment = null }) {
   const [viewState, setViewState] = useState({
     status: 'loading',
     source: 'none',
@@ -592,6 +627,7 @@ function AvailableApplications() {
     source: 'favorite',
   })
   const [allServices, setAllServices] = useState([])
+  const [localPins, setLocalPins] = useState(loadLocalPins)
   const [orderedFavorites, setOrderedFavorites] = useState([])
   const [isDragging, setIsDragging] = useState(false)
   const launchRequestsRef = useRef(new Map())
@@ -602,10 +638,19 @@ function AvailableApplications() {
   const favoritesRowRef = useRef(null)
   const flipRectsRef = useRef(new Map())
 
-  const favoriteApplications = useMemo(
-    () => getFavoriteApplications(viewState.sections),
-    [viewState.sections],
-  )
+  const favoriteApplications = useMemo(() => {
+    const entFavorites = getFavoriteApplications(viewState.sections)
+    const pinnedLocalServices = allServices.filter(
+      (service) => isLocalService(service) && localPins.includes(getApplicationKey(service)),
+    )
+    return [...entFavorites, ...pinnedLocalServices]
+  }, [viewState.sections, allServices, localPins])
+  const visibleServices = useMemo(() => {
+    const pinnedLocalKeys = new Set(localPins)
+    return allServices.filter(
+      (service) => !isLocalService(service) || !pinnedLocalKeys.has(getApplicationKey(service)),
+    )
+  }, [allServices, localPins])
   const shouldShowFavoriteRow = viewState.status === 'ready' && orderedFavorites.length > 0
   const shouldHideFavoritesSection = viewState.status === 'empty'
     || (viewState.status === 'ready' && favoriteApplications.length === 0)
@@ -711,6 +756,17 @@ function AvailableApplications() {
 
         const sections = normalizeBootstrapSections(bootstrap)
         const services = normalizeAllServices(bootstrap)
+
+        if (establishment === 'iutlan') {
+          services.unshift({
+            id: 'lent-iutlan-notes9',
+            title: 'Notes IUT Lannion',
+            description: 'Consulter ses notes et résultats',
+            href: toNavigableHref('https://notes9.iutlan.univ-rennes1.fr/services/doAuth.php?href=https://notes9.iutlan.univ-rennes1.fr/'),
+            target: '_blank',
+          })
+        }
+
         setAllServices(services)
 
         if (sections.sections.length > 0) {
@@ -952,6 +1008,17 @@ function AvailableApplications() {
 
   async function handleUnfavorite(application) {
     const applicationKey = getApplicationKey(application)
+
+    if (isLocalService(application)) {
+      closeContextMenu()
+      setLocalPins((current) => {
+        const next = current.filter((key) => key !== applicationKey)
+        saveLocalPins(next)
+        return next
+      })
+      return
+    }
+
     const requestPath = buildRemoveFavoriteRequestPath(application)
 
     if (!requestPath) {
@@ -1029,8 +1096,20 @@ function AvailableApplications() {
 
   async function handleAddFavorite(application) {
     const applicationKey = getApplicationKey(application)
-    const lastFavorite = orderedFavorites[orderedFavorites.length - 1]
-    const requestPath = buildAddFavoriteRequestPath(application, lastFavorite)
+
+    if (isLocalService(application)) {
+      closeContextMenu()
+      setLocalPins((current) => {
+        if (current.includes(applicationKey)) return current
+        const next = [...current, applicationKey]
+        saveLocalPins(next)
+        return next
+      })
+      return
+    }
+
+    const lastEntFavorite = orderedFavorites.filter((f) => !isLocalService(f)).pop()
+    const requestPath = buildAddFavoriteRequestPath(application, lastEntFavorite)
 
     if (!requestPath) {
       setFavoriteActionState({
@@ -1234,14 +1313,14 @@ function AvailableApplications() {
         <p className="favorites-strip__feedback-text">{favoriteActionState.error}</p>
       ) : null}
 
-      {allServices.length > 0 ? (
+      {visibleServices.length > 0 ? (
         <div className="app-drawer">
           <div className="app-drawer__label">
             <Icon icon="carbon:app-switcher" className="app-drawer__label-icon" aria-hidden="true" />
             <span className="app-drawer__label-text">Toutes les applications</span>
           </div>
           <div className="app-drawer__grid">
-            {allServices.map((service) => {
+            {visibleServices.map((service) => {
               const applicationKey = getApplicationKey(service)
               const resolvedLaunch = launchTargets[applicationKey]
               const href = resolvedLaunch?.href || service.href

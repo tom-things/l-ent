@@ -541,6 +541,22 @@ function parseIcalDate(value) {
   return value.trim()
 }
 
+function extractHtmlRedirect(html, pageUrl) {
+  const meta = html.match(/<meta[^>]+http-equiv=["']?refresh["']?[^>]+content=["'][^"']*url=([^\s"'>]+)/i)
+    || html.match(/<meta[^>]+content=["'][^;]*;\s*url=([^\s"'>]+)[^>]*http-equiv=["']?refresh["']?/i)
+  if (meta) {
+    return resolveUrl(meta[1].replace(/["']/g, ''), pageUrl)
+  }
+
+  const js = html.match(/(?:window\.)?location(?:\.href)?\s*=\s*["']([^"']+)["']/i)
+    || html.match(/location\.replace\s*\(\s*["']([^"']+)["']\s*\)/i)
+  if (js) {
+    return resolveUrl(js[1], pageUrl)
+  }
+
+  return null
+}
+
 function unescapeIcal(value) {
   return value
     .replace(/\\n/g, '\n')
@@ -551,14 +567,14 @@ function unescapeIcal(value) {
 }
 
 async function establishPlanningSession(jar) {
-  // 1. Get CAS service ticket for the planning service
+  // 1. Get CAS service ticket and establish authenticated JSESSIONID
   const casLoginUrl = `${CAS_ORIGIN}/login?service=${encodeURIComponent(PLANNING_SERVICE_URL)}`
   const casResult = await followRedirectChain(casLoginUrl, jar, {
     headers: { Accept: 'text/html,application/xhtml+xml,*/*' },
   })
   await casResult.response.text()
 
-  // 2. Get the GWT strong name
+  // 2. Get the GWT strong name (separate request, doesn't need ticket)
   const nocacheUrl = `${PLANNING_ORIGIN}/direct/gwtdirectplanning/gwtdirectplanning.nocache.js`
   const nocacheResponse = await fetchWithJar(nocacheUrl, jar, {
     headers: { Accept: '*/*' },
@@ -580,7 +596,7 @@ async function establishPlanningSession(jar) {
     ...(strongName ? { 'X-GWT-Permutation': strongName } : {}),
   }
 
-  return { moduleBase, strongName, rpcHeaders, casResult }
+  return { moduleBase, strongName, rpcHeaders, ticket }
 }
 
 function createEntDevAuthPlugin() {
@@ -656,6 +672,7 @@ function createEntDevAuthPlugin() {
           user: result.layout.user,
           updatedAt: Date.now(),
           jar: result.jar,
+          credentials: { username, password },
         })
 
         setLocalSessionCookie(res, sessionId)
@@ -745,67 +762,134 @@ function createEntDevAuthPlugin() {
           return
         }
 
-        const planningSession = await establishPlanningSession(session.jar)
-        const { moduleBase, strongName, rpcHeaders } = planningSession
-        const rpcUrl = `${PLANNING_ORIGIN}/direct/gwtdirectplanning/MyPlanningClientServiceProxy`
-
-        // Fetch the actual compiled GWT module (try .cache.html, the usual GWT format)
-        const probeUrls = [
-          `${moduleBase}${strongName}.cache.html`,
-          `${moduleBase}${strongName}.cache.js`,
-          `${moduleBase}deferredjs/${strongName}/1.cache.js`,
-        ]
-        let cacheContent = ''
-        let cacheUrl = ''
-        for (const url of probeUrls) {
-          const r = await fetchWithJar(url, session.jar, {
-            headers: { Accept: '*/*' }, redirect: 'follow',
-          })
-          const text = await r.text()
-          if (text.length > 5000 && !text.includes('<!doctype') && !text.includes('Erreur')) {
-            cacheContent = text
-            cacheUrl = url
-            break
-          }
+        const CAMPUS_API = 'https://campus-app.univ-rennes.fr/api'
+        const campusHeaders = {
+          deviceid: 'null',
+          devicemanufacturer: 'Google Inc.',
+          devicemodel: '',
+          deviceos: 'Web',
+          deviceversion: '20030107',
+          'x-app-version': '2.4.5',
+          'x-lang': 'fr',
+          'x-nav-lang': 'fr-FR',
         }
 
-        // Call method1login(long projectId, LoginRequest request)
-        const svc = 'com.adesoft.gwt.directplan.client.rpc.MyPlanningClientServiceProxy'
-        const policyHash = '2912ADA6C426CFB85D3ACABE4CE65F74'
-        const loginReqType = 'com.adesoft.gwt.core.client.rpc.data.LoginRequest/3705388826'
+        // Helper: get a fresh CAS ticket for a given service URL (without consuming it)
+        const getTicket = async (serviceUrl) => {
+          const casUrl = `${CAS_ORIGIN}/login?service=${encodeURIComponent(serviceUrl)}`
+          let cur = casUrl
+          for (let i = 0; i < 10; i++) {
+            const r = await fetchWithJar(cur, session.jar, { headers: { Accept: 'text/html, */*' }, redirect: 'manual' })
+            const loc = r.headers.get('location')
+            await r.text()
+            if (!loc || !isRedirectStatus(r.status)) return null
+            const next = resolveUrl(loc, cur)
+            const m = next.match(/[?&]ticket=([^&]+)/)
+            if (m) return m[1]
+            cur = next
+          }
+          return null
+        }
 
         const results = {}
 
-        // LoginRequest needs N fields after type token. Try 5-10 null fields.
-        for (let n = 5; n <= 12; n++) {
-          const nullFields = Array(n).fill('0').join('|')
-          const p = `7|0|6|${moduleBase}|${policyHash}|${svc}|method1login|J|${loginReqType}|1|2|3|4|2|5|6|3|6|${nullFields}|`
-          const r = await fetchWithJar(rpcUrl, session.jar, {
-            method: 'POST', headers: rpcHeaders, body: p, redirect: 'follow',
-          })
-          const text = await r.text()
-          const tooFew = text.includes('Too few tokens')
-          const tooMany = text.includes('Too many tokens')
-          results[`${n}_nulls`] = {
-            tooFew,
-            tooMany,
-            response: text.slice(0, 500),
-          }
-          // If we got neither too few nor too many, we found the right count
-          if (!tooFew && !tooMany) break
-          // If too many, we overshot
-          if (tooMany) break
-        }
-
-        sendJson(res, 200, {
-          authenticated: true,
-          events: [],
-          debug: { strongName, policyHash, results },
+        // Just navigate to the web app like a browser would
+        const webResult = await followRedirectChain('https://campus-app.univ-rennes.fr/web/', session.jar, {
+          headers: { Accept: 'text/html,application/xhtml+xml,*/*' },
         })
+        const webHtml = await webResult.response.text()
+        results.chain = webResult.chain
+        results.finalUrl = webResult.finalUrl
+        results.status = webResult.response.status
+        results.bodySnippet = webHtml.slice(0, 1000)
+        results.cookies = session.jar.getCookieNamesForHost('campus-app.univ-rennes.fr')
+
+        sendJson(res, 200, { authenticated: true, events: [], debug: results })
       } catch (error) {
         sendJson(res, 500, {
           error: error instanceof Error ? error.message : String(error),
         })
+      }
+    })
+
+    middlewares.use('/__ent_auth/launch', async (req, res, next) => {
+      if (req.method !== 'GET') {
+        next()
+        return
+      }
+
+      const parsedUrl = new URL(req.url, 'http://localhost')
+      const targetUrl = parsedUrl.searchParams.get('url')
+
+      if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) {
+        res.statusCode = 302
+        res.setHeader('Location', '/')
+        res.end()
+        return
+      }
+
+      const session = getSessionFromRequest(req, sessions)
+      if (!session) {
+        res.statusCode = 302
+        res.setHeader('Location', targetUrl)
+        res.end()
+        return
+      }
+
+      try {
+        let currentUrl = targetUrl
+
+        for (let attempt = 0; attempt < 15; attempt += 1) {
+          const response = await fetchWithJar(currentUrl, session.jar, {
+            redirect: 'manual',
+            headers: {
+              Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            },
+          })
+
+          const location = response.headers.get('location')
+
+          if (!isRedirectStatus(response.status)) {
+            const html = await response.text()
+            const htmlRedirect = extractHtmlRedirect(html, currentUrl)
+            if (htmlRedirect) {
+              currentUrl = htmlRedirect
+              continue
+            }
+            res.statusCode = 302
+            res.setHeader('Location', currentUrl)
+            res.end()
+            return
+          }
+
+          if (!location) {
+            res.statusCode = 302
+            res.setHeader('Location', currentUrl)
+            res.end()
+            return
+          }
+
+          const nextUrl = resolveUrl(location, currentUrl)
+          const currentHost = new URL(currentUrl).hostname
+          const nextHost = new URL(nextUrl).hostname
+
+          if (currentHost.includes('sso-cas') && !nextHost.includes('sso-cas')) {
+            res.statusCode = 302
+            res.setHeader('Location', nextUrl)
+            res.end()
+            return
+          }
+
+          currentUrl = nextUrl
+        }
+
+        res.statusCode = 302
+        res.setHeader('Location', targetUrl)
+        res.end()
+      } catch {
+        res.statusCode = 302
+        res.setHeader('Location', targetUrl)
+        res.end()
       }
     })
 
