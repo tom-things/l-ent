@@ -80,6 +80,8 @@ function WidgetContainer({
   userName = ' ',
   greeting,
   isSessionReady = true,
+  account = null,
+  establishment = null,
 }) {
   const displayName = userName?.trim() || ' '
   const greetingSubtitle = greeting ?? getGreetingSubtitle()
@@ -255,7 +257,7 @@ function WidgetContainer({
         </article>
       </div>
 
-      <AvailableApplications />
+      <AvailableApplications establishment={establishment} />
 
       {isLocationPickerOpen ? (
         <div

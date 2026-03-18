@@ -474,6 +474,24 @@ function parseIcalDate(value) {
   return value.trim()
 }
 
+function extractHtmlRedirect(html, pageUrl) {
+  // <meta http-equiv="refresh" content="0; url=...">
+  const meta = html.match(/<meta[^>]+http-equiv=["']?refresh["']?[^>]+content=["'][^"']*url=([^\s"'>]+)/i)
+    || html.match(/<meta[^>]+content=["'][^;]*;\s*url=([^\s"'>]+)[^>]*http-equiv=["']?refresh["']?/i)
+  if (meta) {
+    return resolveUrl(meta[1].replace(/["']/g, ''), pageUrl)
+  }
+
+  // window.location = '...', window.location.href = '...', location.href = '...'
+  const js = html.match(/(?:window\.)?location(?:\.href)?\s*=\s*["']([^"']+)["']/i)
+    || html.match(/location\.replace\s*\(\s*["']([^"']+)["']\s*\)/i)
+  if (js) {
+    return resolveUrl(js[1], pageUrl)
+  }
+
+  return null
+}
+
 function unescapeIcal(value) {
   return value
     .replace(/\\n/g, '\n')
@@ -753,7 +771,73 @@ app.get('/__ent_auth/planning', async (req, res) => {
   }
 })
 
-// 5. Logout Endpoint
+// 5. CAS Launch Endpoint — resolves CAS SSO for external app links
+app.get('/__ent_auth/launch', async (req, res) => {
+  const targetUrl = req.query.url
+  const debug = req.query.debug === '1'
+
+  if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) {
+    return res.redirect('/')
+  }
+
+  const session = getSessionFromRequest(req)
+  if (!session) {
+    return res.redirect(targetUrl)
+  }
+
+  const chain = []
+
+  try {
+    let currentUrl = targetUrl
+
+    for (let attempt = 0; attempt < 15; attempt += 1) {
+      const response = await fetchWithJar(currentUrl, session.jar, {
+        redirect: 'manual',
+        headers: {
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+      })
+
+      const location = response.headers.get('location')
+      chain.push({ status: response.status, url: currentUrl, location })
+
+      if (!isRedirectStatus(response.status)) {
+        const html = await response.text()
+        const htmlRedirect = extractHtmlRedirect(html, currentUrl)
+        if (htmlRedirect) {
+          currentUrl = htmlRedirect
+          continue
+        }
+        if (debug) return res.json({ finalUrl: currentUrl, chain })
+        return res.redirect(currentUrl)
+      }
+
+      if (!location) {
+        if (debug) return res.json({ finalUrl: currentUrl, chain })
+        return res.redirect(currentUrl)
+      }
+
+      const nextUrl = resolveUrl(location, currentUrl)
+      const currentHost = new URL(currentUrl).hostname
+      const nextHost = new URL(nextUrl).hostname
+
+      if (currentHost.includes('sso-cas') && !nextHost.includes('sso-cas')) {
+        if (debug) return res.json({ finalUrl: nextUrl, chain })
+        return res.redirect(nextUrl)
+      }
+
+      currentUrl = nextUrl
+    }
+
+    if (debug) return res.json({ finalUrl: targetUrl, chain, error: 'too many redirects' })
+    res.redirect(targetUrl)
+  } catch (err) {
+    if (debug) return res.json({ error: String(err), chain })
+    res.redirect(targetUrl)
+  }
+})
+
+// 6. Logout Endpoint
 app.post('/__ent_auth/logout', (req, res) => {
   const session = getSessionFromRequest(req)
   if (session) {

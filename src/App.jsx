@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
 import favicon from './assets/favicon.png'
+import AppFooter from './components/AppFooter'
 import AppHeader from './components/AppHeader'
 import LentButton from './components/LentButton'
 import LoginPage from './components/LoginPage'
+import OnboardingPage, { getStoredEstablishment, ESTABLISHMENT_KEY } from './components/OnboardingPage'
 import WidgetContainer from './components/WidgetContainer'
 import {
   getAccountInfo,
@@ -18,6 +20,46 @@ import {
 
 const DEFAULT_REQUEST_PATH = '/api/v4-3/dlm/layout.json'
 const BASE_DOCUMENT_TITLE = "l'ent - Toute ta fac, au même endroit."
+const SESSION_CACHE_KEY = 'l-ent:session-cache'
+const SESSION_CACHE_TTL_MS = 8 * 60 * 60 * 1000
+
+function loadCachedSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_CACHE_KEY)
+    if (!raw) return null
+    const cached = JSON.parse(raw)
+    if (!cached?.authenticated || !cached.cachedAt) return null
+    if (Date.now() - cached.cachedAt > SESSION_CACHE_TTL_MS) {
+      localStorage.removeItem(SESSION_CACHE_KEY)
+      return null
+    }
+    return cached
+  } catch {
+    return null
+  }
+}
+
+function saveCachedSession({ user, givenName, account }) {
+  try {
+    localStorage.setItem(SESSION_CACHE_KEY, JSON.stringify({
+      authenticated: true,
+      user,
+      givenName,
+      account,
+      cachedAt: Date.now(),
+    }))
+  } catch {
+    // Storage full or unavailable
+  }
+}
+
+function clearCachedSession() {
+  try {
+    localStorage.removeItem(SESSION_CACHE_KEY)
+  } catch {
+    // Ignore
+  }
+}
 
 function prettyPrint(value) {
   if (typeof value === 'string') {
@@ -116,14 +158,17 @@ function App() {
     password: '',
   })
   const [requestPath, setRequestPath] = useState(DEFAULT_REQUEST_PATH)
+  const [establishment, setEstablishment] = useState(getStoredEstablishment)
+  const cachedSession = useRef(loadCachedSession()).current
   const [sessionState, setSessionState] = useState({
     checking: true,
-    authenticated: false,
-    user: null,
-    givenName: null,
+    authenticated: Boolean(cachedSession?.authenticated),
+    user: cachedSession?.user ?? null,
+    givenName: cachedSession?.givenName ?? null,
+    account: cachedSession?.account ?? null,
     error: '',
   })
-  const [hasCheckedInitialSession, setHasCheckedInitialSession] = useState(false)
+  const [hasCheckedInitialSession, setHasCheckedInitialSession] = useState(Boolean(cachedSession))
   const [debugState, setDebugState] = useState({
     loading: false,
     label: 'Session',
@@ -161,23 +206,35 @@ function App() {
     try {
       const session = await getAuthSession()
       let givenName = null
+      let account = null
 
       if (session.authenticated) {
         try {
-          const account = await getAccountInfo()
-          givenName = account.account?.given_name ?? null
+          const accountResponse = await getAccountInfo()
+          account = accountResponse.account ?? null
+          givenName = account?.given_name ?? null
         } catch {
           // Account info is best-effort
         }
       }
 
+      const authenticated = Boolean(session.authenticated)
+      const user = session.user ?? null
+
       setSessionState({
         checking: false,
-        authenticated: Boolean(session.authenticated),
-        user: session.user ?? null,
+        authenticated,
+        user,
         givenName,
+        account,
         error: '',
       })
+
+      if (authenticated) {
+        saveCachedSession({ user, givenName, account })
+      } else {
+        clearCachedSession()
+      }
 
       if (exposeOutput) {
         commitDebugState('Session', session)
@@ -192,8 +249,10 @@ function App() {
         authenticated: false,
         user: null,
         givenName: null,
+        account: null,
         error: message,
       })
+      clearCachedSession()
 
       if (exposeOutput) {
         commitDebugState('Session', null, message)
@@ -305,11 +364,13 @@ function App() {
       await refreshSession()
     } catch (error) {
       const message = getFrenchAuthErrorMessage(error, 'login')
+      clearCachedSession()
       setSessionState({
         checking: false,
         authenticated: false,
         user: null,
         givenName: null,
+        account: null,
         error: message,
       })
       commitDebugState('Connexion', null, message)
@@ -331,11 +392,13 @@ function App() {
 
     try {
       const result = await logoutFromEnt()
+      clearCachedSession()
       setSessionState({
         checking: false,
         authenticated: false,
         user: null,
         givenName: null,
+        account: null,
         error: '',
       })
       commitDebugState('Deconnexion', result)
@@ -392,6 +455,11 @@ function App() {
     <main className="app-shell">
       {shouldHoldInitialRender ? (
         <div className="blank-surface" aria-hidden="true" />
+      ) : sessionState.authenticated && !establishment ? (
+        <OnboardingPage
+          userName={sessionState.givenName ?? sessionState.user}
+          onSelect={setEstablishment}
+        />
       ) : sessionState.authenticated ? (
         <>
           <AppHeader
@@ -403,8 +471,11 @@ function App() {
             <WidgetContainer
               userName={sessionState.givenName ?? sessionState.user}
               isSessionReady={!sessionState.checking}
+              account={sessionState.account}
+              establishment={establishment}
             />
           </div>
+          <AppFooter establishment={establishment} />
         </>
       ) : (
         <LoginPage

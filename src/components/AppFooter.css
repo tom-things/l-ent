@@ -1,0 +1,19 @@
+.app-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 32px 24px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.app-footer__logo {
+  height: 32px;
+  width: auto;
+  opacity: 0.5;
+}
+
+.app-footer__mention {
+  line-height: 1.2;
+}
