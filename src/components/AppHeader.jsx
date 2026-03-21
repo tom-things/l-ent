@@ -1,4 +1,5 @@
 import lentLogo from '../assets/lentlogo.svg'
+import lentLogoDark from '../assets/lentlogo-dark.svg'
 import { Icon } from '@iconify/react'
 import LentButton from './LentButton'
 import './AppHeader.css'
@@ -14,13 +15,8 @@ function AppHeader({ authenticated, checking, onPrimaryAction }) {
     <header className="app-header-shell">
       <div className="app-header">
         <a className="app-header__logo-link" href="/" aria-label="Retour à l'accueil">
-          <img
-            className="app-header__logo"
-            src={lentLogo}
-            alt="L'ent"
-            width="128"
-            height="64"
-          />
+          <img className="app-header__logo app-header__logo--light" src={lentLogo} alt="L'ent" width="128" height="64" aria-hidden="true" />
+          <img className="app-header__logo app-header__logo--dark" src={lentLogoDark} alt="L'ent" width="128" height="64" />
         </a>
 
         <div className="app-header__actions">

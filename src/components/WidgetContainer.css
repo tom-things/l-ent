@@ -113,6 +113,12 @@
   background: var(--weather-gradient, linear-gradient(180deg, #fce5b8 4.11%, #fdefd5 35.01%, #fdf5e8 69.27%, #f7f7f5 99.76%));
 }
 
+@media (prefers-color-scheme: dark) {
+  .weather-widget__inner {
+    background: var(--weather-gradient-dark, linear-gradient(180deg, #14141a 4.11%, #111118 35.01%, #0f0f12 69.27%, #0f0f0f 99.76%));
+  }
+}
+
 .weather-widget__icon {
   width: 40px;
   height: 40px;

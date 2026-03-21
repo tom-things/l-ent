@@ -82,6 +82,12 @@
   object-fit: contain;
 }
 
+@media (prefers-color-scheme: dark) {
+  .login-page__badge-mark {
+    filter: invert(1);
+  }
+}
+
 .login-page__copy {
   display: grid;
   gap: 8px;
@@ -121,7 +127,7 @@
 
 .login-page__headline-title {
   margin: 0;
-  color: var(--color-brand);
+  color: #111;
   font-size: 60px;
   font-weight: 700;
   line-height: 0.9;

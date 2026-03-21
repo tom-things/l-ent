@@ -16,6 +16,7 @@ const INITIAL_WEATHER_STATE = {
   location: 'Localisation...',
   icon: 'carbon:cloudy',
   gradient: 'linear-gradient(180deg, #fce5b8 4.11%, #fdefd5 35.01%, #fdf5e8 69.27%, #f7f7f5 99.76%)',
+  gradientDark: 'linear-gradient(180deg, #14141a 4.11%, #111118 35.01%, #0f0f12 69.27%, #0f0f0f 99.76%)',
 }
 
 function getLoadingWeatherState(previousState) {
@@ -24,6 +25,7 @@ function getLoadingWeatherState(previousState) {
     location: previousState?.location || 'Localisation...',
     icon: previousState?.icon || 'carbon:cloudy',
     gradient: previousState?.gradient ?? INITIAL_WEATHER_STATE.gradient,
+    gradientDark: previousState?.gradientDark ?? INITIAL_WEATHER_STATE.gradientDark,
   }
 }
 
@@ -234,7 +236,7 @@ function WidgetContainer({
         <article className={`widget-card weather-widget ${areWidgetsVisible ? 'widget-card--visible widget-card--delay-2' : ''}`}>
           <div
             className="weather-widget__inner"
-            style={{ '--weather-gradient': weatherState.gradient }}
+            style={{ '--weather-gradient': weatherState.gradient, '--weather-gradient-dark': weatherState.gradientDark }}
           >
             <Icon icon={weatherState.icon} className="weather-widget__icon" aria-hidden="true" />
 
