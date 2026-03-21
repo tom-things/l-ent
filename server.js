@@ -443,7 +443,6 @@ function buildEntProxyTargetUrl(requestUrl) {
 function getSessionFromRequest(req) {
   const data = decodeSession(req.cookies[LOCAL_SESSION_COOKIE])
   if (!data) return null
-  if (Date.now() - data.createdAt > SESSION_TTL_MS) return null
   return {
     id: data.id,
     user: data.user,

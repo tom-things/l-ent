@@ -33,6 +33,20 @@
   object-fit: contain;
 }
 
+.app-header__logo--dark {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .app-header__logo--light {
+    display: none;
+  }
+
+  .app-header__logo--dark {
+    display: block;
+  }
+}
+
 .app-header__action-content {
   display: inline-flex;
   align-items: center;
