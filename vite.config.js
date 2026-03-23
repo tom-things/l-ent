@@ -559,6 +559,39 @@ function extractHtmlRedirect(html, pageUrl) {
   return null
 }
 
+function decodeHtmlEntities(text) {
+  return text
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(Number(dec)))
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+}
+
+function extractAutoSubmitForm(html, pageUrl) {
+  if (!/\.submit\s*\(\s*\)/i.test(html)) return null
+
+  const formMatch = html.match(/<form[^>]*\baction=["']([^"']+)["'][^>]*>/i)
+  if (!formMatch) return null
+
+  const action = resolveUrl(decodeHtmlEntities(formMatch[1]), pageUrl)
+  const fields = new URLSearchParams()
+  const inputRegex = /<input[^>]*\btype=["']hidden["'][^>]*\/?>/gi
+  let inputMatch
+  while ((inputMatch = inputRegex.exec(html)) !== null) {
+    const tag = inputMatch[0]
+    const name = tag.match(/\bname=["']([^"']+)["']/)
+    const value = tag.match(/\bvalue=["']([^"']*?)["']/)
+    if (name) {
+      fields.set(decodeHtmlEntities(name[1]), value ? decodeHtmlEntities(value[1]) : '')
+    }
+  }
+
+  return { action, body: fields.toString() }
+}
+
 function unescapeIcal(value) {
   return value
     .replace(/\\n/g, '\n')
@@ -822,6 +855,7 @@ function createEntDevAuthPlugin() {
 
       const parsedUrl = new URL(req.url, 'http://localhost')
       const targetUrl = parsedUrl.searchParams.get('url')
+      const debug = parsedUrl.searchParams.get('debug') === '1'
 
       if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) {
         res.statusCode = 302
@@ -838,6 +872,9 @@ function createEntDevAuthPlugin() {
         return
       }
 
+      const chain = []
+      const targetHost = new URL(targetUrl).hostname
+
       try {
         let currentUrl = targetUrl
 
@@ -850,6 +887,7 @@ function createEntDevAuthPlugin() {
           })
 
           const location = response.headers.get('location')
+          chain.push({ status: response.status, url: currentUrl, location })
 
           if (!isRedirectStatus(response.status)) {
             const html = await response.text()
@@ -858,6 +896,7 @@ function createEntDevAuthPlugin() {
               currentUrl = htmlRedirect
               continue
             }
+            if (debug) { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ finalUrl: currentUrl, chain })); return }
             res.statusCode = 302
             res.setHeader('Location', currentUrl)
             res.end()
@@ -865,6 +904,7 @@ function createEntDevAuthPlugin() {
           }
 
           if (!location) {
+            if (debug) { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ finalUrl: currentUrl, chain })); return }
             res.statusCode = 302
             res.setHeader('Location', currentUrl)
             res.end()
@@ -876,8 +916,21 @@ function createEntDevAuthPlugin() {
           const nextHost = new URL(nextUrl).hostname
 
           if (currentHost.includes('sso-cas') && !nextHost.includes('sso-cas')) {
+            if (nextHost === targetHost) {
+              // Simple CAS flow: CAS redirects directly to the target → exit with ticket
+              if (debug) { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ finalUrl: nextUrl, chain })); return }
+              res.statusCode = 302
+              res.setHeader('Location', nextUrl)
+              res.end()
+              return
+            }
+            // SAML/Shibboleth flow detected (CAS → intermediate IdP, not target).
+            // Server-side auth can't work here because SAML session cookies
+            // are bound to the SP domain and can't be transferred to the browser.
+            // Redirect the browser directly — it will complete the full auth flow itself.
+            if (debug) { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ finalUrl: targetUrl, chain, saml: true })); return }
             res.statusCode = 302
-            res.setHeader('Location', nextUrl)
+            res.setHeader('Location', targetUrl)
             res.end()
             return
           }
@@ -885,10 +938,12 @@ function createEntDevAuthPlugin() {
           currentUrl = nextUrl
         }
 
+        if (debug) { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ finalUrl: targetUrl, chain, error: 'too many redirects' })); return }
         res.statusCode = 302
         res.setHeader('Location', targetUrl)
         res.end()
-      } catch {
+      } catch (err) {
+        if (debug) { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: String(err), chain })); return }
         res.statusCode = 302
         res.setHeader('Location', targetUrl)
         res.end()

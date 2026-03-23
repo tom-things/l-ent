@@ -535,6 +535,39 @@ function extractHtmlRedirect(html, pageUrl) {
   return null
 }
 
+function decodeHtmlEntities(text) {
+  return text
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(Number(dec)))
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+}
+
+function extractAutoSubmitForm(html, pageUrl) {
+  if (!/\.submit\s*\(\s*\)/i.test(html)) return null
+
+  const formMatch = html.match(/<form[^>]*\baction=["']([^"']+)["'][^>]*>/i)
+  if (!formMatch) return null
+
+  const action = resolveUrl(decodeHtmlEntities(formMatch[1]), pageUrl)
+  const fields = new URLSearchParams()
+  const inputRegex = /<input[^>]*\btype=["']hidden["'][^>]*\/?>/gi
+  let inputMatch
+  while ((inputMatch = inputRegex.exec(html)) !== null) {
+    const tag = inputMatch[0]
+    const name = tag.match(/\bname=["']([^"']+)["']/)
+    const value = tag.match(/\bvalue=["']([^"']*?)["']/)
+    if (name) {
+      fields.set(decodeHtmlEntities(name[1]), value ? decodeHtmlEntities(value[1]) : '')
+    }
+  }
+
+  return { action, body: fields.toString() }
+}
+
 function unescapeIcal(value) {
   return value
     .replace(/\\n/g, '\n')
@@ -821,6 +854,7 @@ app.get('/__ent_auth/launch', async (req, res) => {
   }
 
   const chain = []
+  const targetHost = new URL(targetUrl).hostname
 
   try {
     let currentUrl = targetUrl
@@ -857,8 +891,17 @@ app.get('/__ent_auth/launch', async (req, res) => {
       const nextHost = new URL(nextUrl).hostname
 
       if (currentHost.includes('sso-cas') && !nextHost.includes('sso-cas')) {
-        if (debug) return res.json({ finalUrl: nextUrl, chain })
-        return res.redirect(nextUrl)
+        if (nextHost === targetHost) {
+          // Simple CAS flow: CAS redirects directly to the target → exit with ticket
+          if (debug) return res.json({ finalUrl: nextUrl, chain })
+          return res.redirect(nextUrl)
+        }
+        // SAML/Shibboleth flow detected (CAS → intermediate IdP, not target).
+        // Server-side auth can't work here because SAML session cookies
+        // are bound to the SP domain and can't be transferred to the browser.
+        // Redirect the browser directly — it will complete the full auth flow itself.
+        if (debug) return res.json({ finalUrl: targetUrl, chain, saml: true })
+        return res.redirect(targetUrl)
       }
 
       currentUrl = nextUrl
