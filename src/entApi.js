@@ -144,6 +144,9 @@ export async function getAuthSession() {
 }
 
 export async function loginToEnt({ username, password }) {
+  // Clear stale grades cache so a fresh fetch happens after login
+  localStorage.removeItem(GRADES_CACHE_KEY)
+
   const response = await fetch(`${ENT_AUTH_PREFIX}/login`, {
     method: 'POST',
     credentials: 'same-origin',
@@ -225,17 +228,148 @@ export async function getGrades({ force = false } = {}) {
 
   const data = await parseJsonPayload(response)
 
-  try {
-    localStorage.setItem(GRADES_CACHE_KEY, JSON.stringify({ data, cachedAt: Date.now() }))
-  } catch {
-    // storage full
+  // Only cache authenticated responses with actual grades data
+  if (data.authenticated && data.grades) {
+    try {
+      localStorage.setItem(GRADES_CACHE_KEY, JSON.stringify({ data, cachedAt: Date.now() }))
+    } catch {
+      // storage full
+    }
   }
 
   return data
 }
 
+export function clearGradesCache() {
+  localStorage.removeItem(GRADES_CACHE_KEY)
+}
+
+function parseGradeValue(val) {
+  if (val == null || val === '~' || val === 'abs' || val === 'EXC' || val === '') return null
+  const n = parseFloat(String(val).replace(',', '.'))
+  return Number.isFinite(n) ? n : null
+}
+
+function computeWeightedAverage(entries) {
+  let totalWeighted = 0
+  let totalCoef = 0
+
+  for (const { value, coef } of entries) {
+    totalWeighted += value * coef
+    totalCoef += coef
+  }
+
+  return totalCoef > 0 ? totalWeighted / totalCoef : null
+}
+
+export async function getAverageGrade() {
+  const data = await getGrades()
+
+  if (!data.authenticated) {
+    return { error: 'Non connecté.' }
+  }
+
+  const releve = data.grades?.['relevé']
+  if (!releve) return { error: 'Aucun relevé disponible.' }
+
+  // Use the current semester's relevé (last in the semestres list)
+  const semestres = data.grades?.semestres
+  let currentReleve = releve
+  if (semestres && Array.isArray(semestres) && semestres.length > 0) {
+    const latest = semestres[semestres.length - 1]
+    if (latest?.['relevé']) currentReleve = latest['relevé']
+  }
+
+  // Collect all graded entries from ressources and saes
+  const allGrades = []
+  const allPromoGrades = []
+  const breakdown = []
+
+  for (const sectionKey of ['ressources', 'saes']) {
+    const section = currentReleve[sectionKey]
+    if (!section) continue
+
+    for (const [code, resource] of Object.entries(section)) {
+      // Try resource-level average first (weighted by scodoc)
+      const resMoy = parseGradeValue(resource.moyenne?.value)
+      const resPromoMoy = parseGradeValue(resource.moyenne?.moy)
+      const resCoef = parseFloat(resource.moyenne?.coef ?? resource.coef ?? '1') || 1
+
+      if (resMoy != null) {
+        const resMax = parseFloat(resource.moyenne?.max ?? '20') || 20
+        const normalized = (resMoy / resMax) * 20
+        allGrades.push({ value: normalized, coef: resCoef })
+        breakdown.push({
+          code,
+          titre: resource.titre ?? code,
+          type: sectionKey,
+          source: 'moyenne',
+          note: resMoy,
+          max: resMax,
+          normalized: +normalized.toFixed(2),
+          coef: resCoef,
+          promoMoy: resPromoMoy,
+        })
+        if (resPromoMoy != null) {
+          allPromoGrades.push({ value: (resPromoMoy / resMax) * 20, coef: resCoef })
+        }
+        continue
+      }
+
+      // Fallback: compute from individual evaluations
+      for (const evaluation of resource.evaluations ?? []) {
+        const val = parseGradeValue(evaluation.note?.value)
+        if (val == null) continue
+        const max = parseFloat(evaluation.note?.max ?? '20') || 20
+        const coef = parseFloat(evaluation.coef ?? '1') || 1
+        const normalized = (val / max) * 20
+        allGrades.push({ value: normalized, coef })
+        breakdown.push({
+          code,
+          titre: resource.titre ?? code,
+          type: sectionKey,
+          source: 'evaluation',
+          description: evaluation.description ?? '',
+          note: val,
+          max,
+          normalized: +normalized.toFixed(2),
+          coef,
+          promoMoy: parseGradeValue(evaluation.note?.moy),
+        })
+
+        const moyVal = parseGradeValue(evaluation.note?.moy)
+        if (moyVal != null) {
+          allPromoGrades.push({ value: (moyVal / max) * 20, coef })
+        }
+      }
+    }
+  }
+
+  const average = computeWeightedAverage(allGrades)
+  const promoAverage = computeWeightedAverage(allPromoGrades)
+
+  if (average == null) {
+    return { error: 'Aucune note disponible pour calculer la moyenne.' }
+  }
+
+  return {
+    average: average.toFixed(2),
+    promoAverage: promoAverage != null ? promoAverage.toFixed(2) : null,
+    debug: {
+      totalEntries: allGrades.length,
+      totalCoef: allGrades.reduce((s, e) => s + e.coef, 0),
+      breakdown,
+    },
+  }
+}
+
 export async function getLatestGrade() {
   const data = await getGrades()
+
+  if (!data.authenticated) {
+    return { error: 'Non connecté. Veuillez vous connecter pour accéder aux notes.' }
+  }
+
   const releve = data.grades?.['relevé']
   if (!releve) return { error: 'Aucun relevé disponible.' }
 

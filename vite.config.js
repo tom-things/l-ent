@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
+import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 import { defineConfig } from 'vite'
 
 const ENT_ORIGIN = 'https://services-numeriques.univ-rennes.fr'
@@ -925,6 +927,10 @@ function createEntDevAuthPlugin() {
         let gradesData = null
         try { gradesData = JSON.parse(dataText) } catch { gradesData = dataText }
 
+        // Debug: log Notes9 response to help diagnose grade fetching issues
+        const hasReleve = typeof gradesData === 'object' && gradesData !== null && 'relevé' in gradesData
+        console.log(`[grades] Notes9 response: status=${dataResponse.status}, hasRelevé=${hasReleve}, keys=${typeof gradesData === 'object' && gradesData !== null ? Object.keys(gradesData).join(',') : typeof gradesData}`)
+
         sendJson(res, 200, {
           authenticated: true,
           grades: gradesData,
@@ -1017,8 +1023,45 @@ function createEntDevAuthPlugin() {
 const entDevAuthPlugin = createEntDevAuthPlugin()
 
 export default defineConfig({
-  plugins: [react(), entDevAuthPlugin],
+  plugins: [
+    tailwindcss(),
+    react(),
+    entDevAuthPlugin,
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['icon.svg', 'apple-touch-icon.png'],
+      manifest: {
+        name: "l'ent",
+        short_name: "l'ent",
+        description: "l'ent réunit toutes vos données universitaires — cours, résultats, messagerie dans une interface lisible, rapide et agréable à utiliser.",
+        theme_color: '#FCFBF8',
+        background_color: '#FCFBF8',
+        display: 'standalone',
+        scope: '/',
+        start_url: '/',
+        icons: [
+          {
+            src: 'pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+        ],
+      },
+    }),
+  ],
   server: {
+    allowedHosts: true,
     proxy: {
       '/__ent_proxy': {
         target: ENT_ORIGIN,

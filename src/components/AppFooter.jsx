@@ -1,5 +1,3 @@
-import './AppFooter.css'
-
 import iutlanLogo from '../assets/uni_logos/iutlan.svg'
 import iutsaibLogo from '../assets/uni_logos/iutsaib.svg'
 import iutsaiLogo from '../assets/uni_logos/iutsai.svg'
@@ -28,13 +26,13 @@ function AppFooter({ establishment }) {
   const logo = LOGOS[establishment] || univRennesLogo
 
   return (
-    <footer className="app-footer">
+    <footer className="flex items-center justify-center gap-4 py-8 px-6 text-text-muted text-[13px]">
       <img
-        className="app-footer__logo"
+        className="h-8 w-auto opacity-50 dark:invert"
         src={logo}
         alt=""
       />
-      <span className="app-footer__mention">
+      <span className="leading-[1.2]">
         Client alternatif à l&apos;ENT de l&apos;Université de Rennes
       </span>
     </footer>

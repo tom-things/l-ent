@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '@iconify/react'
-import './AvailableApplications.css'
 import { getAppIcon } from '../assets/app_icons/uni_rennes'
 import {
   ENT_ORIGIN,
@@ -140,8 +139,6 @@ function toNavigableHref(value) {
   try {
     return buildEntProxyHref(href)
   } catch {
-    // External URL — route through the CAS launch endpoint so the
-    // server-side cookie jar can supply the TGC for SSO.
     return `/__ent_auth/launch?url=${encodeURIComponent(href)}`
   }
 }
@@ -556,8 +553,6 @@ function navigateToApplication({ href, target }, preparedWindow = null) {
     return
   }
 
-  // Route all external _blank navigations through the CAS launch endpoint
-  // so the server-side TGC cookie is used for SSO.
   let launchHref = href
   if (target === '_blank') {
     if (href.startsWith('/__ent_proxy')) {
@@ -629,6 +624,7 @@ function AvailableApplications({ establishment = null }) {
   const [allServices, setAllServices] = useState([])
   const [localPins, setLocalPins] = useState(loadLocalPins)
   const [orderedFavorites, setOrderedFavorites] = useState([])
+  const [searchQuery, setSearchQuery] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const launchRequestsRef = useRef(new Map())
   const removalTimeoutsRef = useRef(new Map())
@@ -651,6 +647,20 @@ function AvailableApplications({ establishment = null }) {
       (service) => !isLocalService(service) || !pinnedLocalKeys.has(getApplicationKey(service)),
     )
   }, [allServices, localPins])
+  const filteredServices = useMemo(() => {
+    if (!searchQuery.trim()) return visibleServices
+    const q = searchQuery.trim().toLowerCase()
+    return visibleServices.filter((s) => (s.title || s.name || '').toLowerCase().includes(q))
+  }, [visibleServices, searchQuery])
+  const highlightedFavoriteKeys = useMemo(() => {
+    if (!searchQuery.trim()) return new Set()
+    const q = searchQuery.trim().toLowerCase()
+    return new Set(
+      orderedFavorites
+        .filter((f) => (f.title || f.name || '').toLowerCase().includes(q))
+        .map(getApplicationKey)
+    )
+  }, [searchQuery, orderedFavorites])
   const shouldShowFavoriteRow = viewState.status === 'ready' && orderedFavorites.length > 0
   const shouldHideFavoritesSection = viewState.status === 'empty'
     || (viewState.status === 'ready' && favoriteApplications.length === 0)
@@ -1135,7 +1145,7 @@ function AvailableApplications({ establishment = null }) {
           'X-Requested-With': 'XMLHttpRequest',
         },
       })
-      
+
       if (!response.ok) {
         throw new Error("Impossible d'ajouter ce favori pour le moment.")
       }
@@ -1212,42 +1222,42 @@ function AvailableApplications({ establishment = null }) {
   }
 
   return (
-    <section className="favorites-strip" aria-labelledby="favorites-strip-title">
-      <div className="favorites-strip__label">
-        <Icon icon="carbon:star" className="favorites-strip__label-icon" aria-hidden="true" />
-        <h2 className="favorites-strip__label-text" id="favorites-strip-title">Favoris</h2>
+    <section className="grid gap-[10px] relative text-brand" aria-labelledby="favorites-strip-title">
+      <div className="flex items-center gap-[5px]">
+        <Icon icon="carbon:star" className="w-[17px] h-[17px] text-brand shrink-0" aria-hidden="true" />
+        <h2 className="m-0 text-base font-medium leading-[1.06]" id="favorites-strip-title">Favoris</h2>
       </div>
 
       {viewState.status === 'loading' ? (
-        <div className="favorites-strip__row" role="status" aria-live="polite">
+        <div className="flex items-center flex-wrap gap-[8px_14px] overflow-visible max-md:flex-col max-md:items-stretch max-md:gap-2" role="status" aria-live="polite">
           {Array.from({ length: 3 }).map((_, index) => (
-            <div key={`loading-favorite-${index}`} className="favorites-strip__item favorites-strip__item--placeholder" aria-hidden="true">
-              <span className="favorites-strip__badge favorites-strip__badge--placeholder" />
-              <span className="favorites-strip__text-placeholder" />
+            <div key={`loading-favorite-${index}`} className="inline-flex items-center gap-[10px] max-w-full py-2 px-[6px] rounded-[18px] min-w-[140px] max-md:w-full max-md:gap-2 max-md:py-[6px] max-md:px-1" aria-hidden="true">
+              <span className="badge-placeholder inline-flex items-center justify-center w-[47px] h-[47px] rounded-[25px] bg-[linear-gradient(90deg,var(--color-bg-muted)_0%,var(--color-bg-subtle)_50%,var(--color-bg-muted)_100%)] bg-[length:200%_100%] animate-shimmer shrink-0 max-md:w-[42px] max-md:h-[42px]" />
+              <span className="text-placeholder-shimmer w-[92px] h-[14px] rounded-full bg-[linear-gradient(90deg,var(--color-bg-muted)_0%,var(--color-bg-subtle)_50%,var(--color-bg-muted)_100%)] bg-[length:200%_100%] animate-shimmer" />
             </div>
           ))}
         </div>
       ) : null}
 
       {viewState.status === 'error' ? (
-        <div className="favorites-strip__feedback">
-          <div className="favorites-strip__feedback-copy">
-            <Icon icon="carbon:warning-filled" className="favorites-strip__feedback-icon" aria-hidden="true" />
-            <p className="favorites-strip__feedback-text">{viewState.error}</p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="inline-flex items-center gap-2">
+            <Icon icon="carbon:warning-filled" className="w-[18px] h-[18px] text-error shrink-0" aria-hidden="true" />
+            <p className="m-0 text-sm font-medium leading-[1.3] text-text-secondary font-body">{viewState.error}</p>
           </div>
 
-          <button type="button" className="favorites-strip__retry" onClick={handleRetry}>
+          <button type="button" className="min-h-[34px] px-[14px] border border-border rounded-full bg-bg text-brand font-inherit text-sm font-semibold hover:bg-bg-subtle" onClick={handleRetry}>
             Réessayer
           </button>
         </div>
       ) : null}
 
       {viewState.status === 'empty' ? (
-        <p className="favorites-strip__feedback-text">Aucun favori ENT disponible pour le moment.</p>
+        <p className="m-0 text-sm font-medium leading-[1.3] text-text-secondary font-body">Aucun favori ENT disponible pour le moment.</p>
       ) : null}
 
       {shouldShowFavoriteRow ? (
-        <div className={`favorites-strip__row ${isDragging ? 'favorites-strip__row--dragging' : ''}`} ref={favoritesRowRef}>
+        <div className={`flex items-center flex-wrap gap-[8px_10px] overflow-visible max-md:flex-col max-md:items-stretch max-md:gap-0 ${isDragging ? '[&_a:hover]:bg-transparent [&_a:focus-visible]:bg-transparent' : ''}`} ref={favoritesRowRef}>
           {orderedFavorites.map((application, index) => {
             const applicationKey = getApplicationKey(application)
             const resolvedLaunch = launchTargets[applicationKey]
@@ -1258,11 +1268,12 @@ function AvailableApplications({ establishment = null }) {
             const isExitingFavorite = Boolean(exitingFavoriteKeys[applicationKey])
             const isContextOpen = contextMenuState.open
               && getApplicationKey(contextMenuState.application ?? {}) === applicationKey
+            const isSearchHighlighted = highlightedFavoriteKeys.has(applicationKey)
             return (
               <a
                 key={application.id}
                 data-app-id={application.id}
-                className={`favorites-strip__item ${isLaunching ? 'favorites-strip__item--loading' : ''} ${(isRemovingFavorite || isExitingFavorite) ? 'favorites-strip__item--busy' : ''} ${isExitingFavorite ? 'favorites-strip__item--removing' : ''} ${isContextOpen ? 'favorites-strip__item--context-open' : ''}`}
+                className={`favorites-strip-item inline-flex items-center gap-2.5 max-w-full py-1.5 px-1.5 pr-4 rounded-[16px] text-inherit no-underline transition-[background-color,box-shadow] duration-[120ms] ease-in-out min-w-0 hover:bg-bg-subtle/60 focus-visible:bg-bg-subtle/60 focus-visible:outline-none cursor-pointer max-md:w-full max-md:py-2.5 max-md:px-2 max-md:pr-3 max-md:border-b max-md:border-border/30 max-md:rounded-none ${isLaunching ? 'pointer-events-none cursor-progress' : ''} ${(isRemovingFavorite || isExitingFavorite) ? 'pointer-events-none' : ''} ${isExitingFavorite ? 'animate-favorite-remove' : ''} ${isContextOpen ? 'bg-context-hover' : ''} ${isSearchHighlighted ? 'favorite-search-highlight' : ''}`}
                 href={href}
                 target={target || undefined}
                 rel={target === '_blank' ? 'noreferrer' : undefined}
@@ -1279,28 +1290,28 @@ function AvailableApplications({ establishment = null }) {
                 onClick={(event) => void handleApplicationClick(event, application)}
               >
                 <span
-                  className="favorites-strip__badge"
+                  className="app-icon inline-flex items-center justify-center w-[36px] h-[36px] rounded-[10px] bg-widget-bg shadow-sm text-brand shrink-0 max-md:w-[34px] max-md:h-[34px]"
                   aria-hidden="true"
                   style={getAppIcon(application.title) ? undefined : { backgroundColor: getLetterStyle(application.title).bg, color: getLetterStyle(application.title).fg }}
                 >
                   {isLaunching ? (
                     <Icon
                       icon="carbon:renew"
-                      className="favorites-strip__badge-icon favorites-strip__badge-icon--spinning"
+                      className="badge-icon-spinning w-4 h-4 animate-spin-slow"
                     />
                   ) : getAppIcon(application.title) ? (
                     <img
                       src={getAppIcon(application.title)}
                       alt=""
-                      className="favorites-strip__badge-image"
+                      className="w-full h-full object-contain rounded-[inherit]"
                     />
                   ) : (
-                    <span className="favorites-strip__badge-letter">
+                    <span className="text-sm font-semibold leading-none select-none">
                       {getAppLetter(application.title)}
                     </span>
                   )}
                 </span>
-                <span className="favorites-strip__item-name">
+                <span className="text-[15px] font-semibold leading-[1.06] whitespace-nowrap overflow-hidden text-ellipsis min-w-0">
                   {isLaunching ? 'Opening...' : application.title}
                 </span>
               </a>
@@ -1310,17 +1321,29 @@ function AvailableApplications({ establishment = null }) {
       ) : null}
 
       {favoriteActionState.error ? (
-        <p className="favorites-strip__feedback-text">{favoriteActionState.error}</p>
+        <p className="m-0 text-sm font-medium leading-[1.3] text-text-secondary font-body">{favoriteActionState.error}</p>
       ) : null}
 
       {visibleServices.length > 0 ? (
-        <div className="app-drawer">
-          <div className="app-drawer__label">
-            <Icon icon="carbon:app-switcher" className="app-drawer__label-icon" aria-hidden="true" />
-            <span className="app-drawer__label-text">Toutes les applications</span>
+        <div className="grid gap-4 mt-7 text-brand">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-[5px]">
+              <Icon icon="carbon:app-switcher" className="w-[17px] h-[17px] text-brand shrink-0" aria-hidden="true" />
+              <span className="text-base font-medium leading-[1.06]">Toutes les applications</span>
+            </div>
+            <div className="relative">
+              <Icon icon="carbon:search" className="absolute left-3 top-1/2 -translate-y-1/2 w-[14px] h-[14px] text-text-muted pointer-events-none" aria-hidden="true" />
+              <input
+                type="text"
+                placeholder="Rechercher..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="app-search-input w-[180px] h-[36px] pl-8 pr-3 border border-border rounded-full bg-widget-bg text-text text-sm font-body leading-none placeholder:text-text-muted transition-[width,border-color] duration-200 focus:w-[240px] focus:border-text-muted max-sm:w-[140px] max-sm:focus:w-[180px]"
+              />
+            </div>
           </div>
-          <div className="app-drawer__grid">
-            {visibleServices.map((service) => {
+          <div className="grid grid-cols-3 gap-x-6 max-lg:grid-cols-2 max-md:grid-cols-1">
+            {filteredServices.map((service, index) => {
               const applicationKey = getApplicationKey(service)
               const resolvedLaunch = launchTargets[applicationKey]
               const href = resolvedLaunch?.href || service.href
@@ -1332,7 +1355,8 @@ function AvailableApplications({ establishment = null }) {
               return (
                 <a
                   key={service.id}
-                  className={`app-card ${isBusy ? 'app-card--busy' : ''} ${isContextOpen ? 'app-card--context-open' : ''}`}
+                  className={`app-card-enter group flex items-center gap-4 py-3 px-2 border-b border-border/40 text-inherit no-underline transition-[background-color] duration-[120ms] ease-in-out min-w-0 hover:bg-bg-subtle/50 focus-visible:bg-bg-subtle/50 focus-visible:outline-none ${isBusy ? 'pointer-events-none opacity-70' : ''} ${isContextOpen ? 'bg-context-hover' : ''}`}
+                  style={{ animationDelay: `${index * 20}ms` }}
                   href={href}
                   target={target || undefined}
                   rel={target === '_blank' ? 'noreferrer' : undefined}
@@ -1342,7 +1366,7 @@ function AvailableApplications({ establishment = null }) {
                   onClick={(event) => void handleApplicationClick(event, service)}
                 >
                   <span
-                    className="app-card__icon"
+                    className="app-icon inline-flex items-center justify-center w-[44px] h-[44px] rounded-[12px] bg-widget-bg shadow-sm shrink-0"
                     aria-hidden="true"
                     style={getAppIcon(service.title) ? undefined : { backgroundColor: getLetterStyle(service.title).bg, color: getLetterStyle(service.title).fg }}
                   >
@@ -1350,23 +1374,23 @@ function AvailableApplications({ establishment = null }) {
                       <img
                         src={getAppIcon(service.title)}
                         alt=""
-                        className="app-card__icon-image"
+                        className="w-full h-full object-contain rounded-[inherit]"
                       />
                     ) : (
-                      <span className="app-card__icon-letter">
+                      <span className="text-lg font-semibold leading-none select-none">
                         {getAppLetter(service.title)}
                       </span>
                     )}
                   </span>
-                  <span className="app-card__text">
-                    <span className="app-card__title">{service.title}</span>
+                  <span className="flex flex-col gap-0.5 flex-1 min-w-0">
+                    <span className="text-[15px] font-semibold leading-[1.2] whitespace-nowrap overflow-hidden text-ellipsis">{service.title}</span>
                     {service.description ? (
-                      <span className="app-card__description">{service.description}</span>
+                      <span className="text-[13px] font-medium leading-[1.3] text-text-muted line-clamp-1 font-body">{service.description}</span>
                     ) : null}
                   </span>
                   <button
                     type="button"
-                    className={`app-card__action ${isFavorite ? 'app-card__action--is-favorite' : ''}`}
+                    className={`app-card-action flex items-center justify-center w-8 h-8 rounded-full border-none bg-transparent text-text-muted opacity-0 cursor-pointer transition-[opacity,background-color,color] duration-[120ms] ease-in-out shrink-0 group-hover:opacity-60 group-focus-visible:opacity-60 focus-visible:opacity-60 ${isFavorite ? 'app-card-action-favorite' : ''}`}
                     aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
                     onClick={(event) => {
                       event.preventDefault()
@@ -1379,7 +1403,7 @@ function AvailableApplications({ establishment = null }) {
                       }
                     }}
                   >
-                    <Icon icon={isFavorite ? 'carbon:star-filled' : 'carbon:star'} className="app-card__action-icon" aria-hidden="true" />
+                    <Icon icon={isFavorite ? 'carbon:star-filled' : 'carbon:star'} className="w-[18px] h-[18px]" aria-hidden="true" />
                   </button>
                 </a>
               )
@@ -1392,16 +1416,15 @@ function AvailableApplications({ establishment = null }) {
         const applicationKey = getApplicationKey(contextMenuState.application)
         const isFavorite = orderedFavorites.some(f => getApplicationKey(f) === applicationKey)
         const isAddMode = !isFavorite && contextMenuState.source === 'all'
-        
-        // Find the actual application with remove limits if it's already a favorite
-        const targetApplication = isAddMode 
-          ? contextMenuState.application 
+
+        const targetApplication = isAddMode
+          ? contextMenuState.application
           : (orderedFavorites.find(f => getApplicationKey(f) === applicationKey) || contextMenuState.application)
 
         return (
         <div
           ref={contextMenuRef}
-          className="favorites-context-menu"
+          className="favorites-context-menu fixed z-60 min-w-[216px] p-[6px] border border-border rounded-[18px] bg-context-bg shadow-[0_18px_40px_var(--color-shadow)] backdrop-blur-[12px] animate-context-menu-in max-md:min-w-[200px]"
           role="menu"
           aria-label={`Actions pour ${targetApplication.title}`}
           style={{
@@ -1414,21 +1437,21 @@ function AvailableApplications({ establishment = null }) {
           {isAddMode ? (
             <button
               type="button"
-              className="favorites-context-menu__action"
+              className="favorites-context-action w-full flex items-center gap-[10px] min-h-[44px] px-3 border-0 rounded-[12px] bg-transparent text-brand font-inherit text-[15px] font-semibold text-left animate-context-action-in hover:bg-context-hover focus-visible:bg-context-hover focus-visible:outline-none"
               role="menuitem"
               onClick={() => void handleAddFavorite(targetApplication)}
             >
-              <Icon icon="carbon:star" className="favorites-context-menu__action-icon" aria-hidden="true" />
+              <Icon icon="carbon:star" className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
               <span>Ajouter aux favoris</span>
             </button>
           ) : (
             <button
               type="button"
-              className="favorites-context-menu__action"
+              className="favorites-context-action w-full flex items-center gap-[10px] min-h-[44px] px-3 border-0 rounded-[12px] bg-transparent text-brand font-inherit text-[15px] font-semibold text-left animate-context-action-in hover:bg-context-hover focus-visible:bg-context-hover focus-visible:outline-none"
               role="menuitem"
               onClick={() => void handleUnfavorite(targetApplication)}
             >
-              <Icon icon="carbon:close-outline" className="favorites-context-menu__action-icon" aria-hidden="true" />
+              <Icon icon="carbon:close-outline" className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
               <span>Retirer des favoris</span>
             </button>
           )}
