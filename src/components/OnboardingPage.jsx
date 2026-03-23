@@ -1,5 +1,3 @@
-import './OnboardingPage.css'
-
 import iutlanLogo from '../assets/uni_logos/iutlan.svg'
 import iutsaibLogo from '../assets/uni_logos/iutsaib.svg'
 import iutsaiLogo from '../assets/uni_logos/iutsai.svg'
@@ -45,33 +43,34 @@ function OnboardingPage({ userName, onSelect }) {
   }
 
   return (
-    <section className="onboarding" aria-label="Choix de l'établissement">
-      <div className="onboarding__content">
-        <div className="onboarding__header">
-          <h1 className="onboarding__title">
+    <section className="flex-1 flex items-center justify-center bg-bg p-8 min-h-0 max-sm:p-5" aria-label="Choix de l'établissement">
+      <div className="flex flex-col gap-8 w-full max-w-[800px]">
+        <div className="flex flex-col gap-3">
+          <h1 className="text-[3.5rem] font-bold leading-[0.9] text-text m-0 max-sm:text-[2.25rem]">
             Hello, {userName || 'étudiant'}
           </h1>
-          <p className="onboarding__subtitle">
+          <p className="text-lg font-medium leading-[1.2] text-text-muted m-0 font-body max-sm:text-base">
             Configurons ton ENT, sélectionne ton établissement affilié à l'université de Rennes
           </p>
         </div>
 
-        <div className="onboarding__grid">
-          {ESTABLISHMENTS.map((establishment) => (
+        <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+          {ESTABLISHMENTS.map((establishment, index) => (
             <button
               key={establishment.id}
               type="button"
-              className="onboarding__card"
+              className="onboarding-card app-card-enter flex items-center gap-3 h-[88px] p-3 bg-widget-bg border border-white rounded-[22px] cursor-pointer text-left font-inherit transition-all duration-150 ease-in-out hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2 max-sm:h-[76px]"
+              style={{ animationDelay: `${index * 40}ms` }}
               onClick={() => handleSelect(establishment)}
             >
-              <span className="onboarding__card-logo">
+              <span className="flex items-center justify-center w-[62px] h-[62px] shrink-0 overflow-hidden max-sm:w-[50px] max-sm:h-[50px]">
                 <img
                   src={establishment.logo}
                   alt=""
-                  className="onboarding__card-logo-image"
+                  className="max-w-full max-h-full object-contain dark:invert"
                 />
               </span>
-              <span className="onboarding__card-name">{establishment.name}</span>
+              <span className="text-[1.1rem] font-semibold text-text leading-[1.1] max-sm:text-base">{establishment.name}</span>
             </button>
           ))}
         </div>

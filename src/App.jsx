@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import './App.css'
 import favicon from './assets/favicon.png'
 import AppFooter from './components/AppFooter'
 import AppHeader from './components/AppHeader'
 import LentButton from './components/LentButton'
 import LoginPage from './components/LoginPage'
+import PwaInstallPrompt from './components/PwaInstallPrompt'
+import RefreshedPrompt from './components/RefreshedPrompt'
 import OnboardingPage, { getStoredEstablishment, ESTABLISHMENT_KEY } from './components/OnboardingPage'
 import WidgetContainer from './components/WidgetContainer'
 import {
   getAccountInfo,
   getAuthSession,
+  getAverageGrade,
   getGrades,
   getLatestGrade,
   getLayout,
@@ -154,6 +156,9 @@ function buildDebugSnapshot(label, data, error = '') {
 
 function App() {
   const [debugOpen, setDebugOpen] = useState(false)
+  const [forceInstallPrompt, setForceInstallPrompt] = useState(false)
+  const [forceIosPrompt, setForceIosPrompt] = useState(false)
+  const [refreshedPromptOpen, setRefreshedPromptOpen] = useState(false)
   const usernameInputRef = useRef(null)
   const [credentials, setCredentials] = useState({
     username: '',
@@ -454,9 +459,9 @@ function App() {
   const shouldHoldInitialRender = !hasCheckedInitialSession && sessionState.checking
 
   return (
-    <main className="app-shell">
+    <main className="relative min-h-screen flex flex-col bg-bg">
       {shouldHoldInitialRender ? (
-        <div className="blank-surface" aria-hidden="true" />
+        <div className="flex-1 min-h-0 bg-bg" aria-hidden="true" />
       ) : sessionState.authenticated && !establishment ? (
         <OnboardingPage
           userName={sessionState.givenName ?? sessionState.user}
@@ -468,8 +473,9 @@ function App() {
             authenticated={sessionState.authenticated}
             checking={sessionState.checking}
             onPrimaryAction={handleHeaderAction}
+            onRefreshedClick={() => setRefreshedPromptOpen(true)}
           />
-          <div className="blank-surface">
+          <div className="flex-1 min-h-0 bg-bg">
             <WidgetContainer
               userName={sessionState.givenName ?? sessionState.user}
               isSessionReady={!sessionState.checking}
@@ -490,37 +496,40 @@ function App() {
       )}
       <button
         type="button"
-        className="debug-hotspot"
+        className="fixed top-0 left-0 w-5 h-5 p-0 border-0 bg-transparent opacity-0 z-20 focus-visible:opacity-100 focus-visible:rounded-br-[12px] focus-visible:bg-context-bg"
         onClick={() => setDebugOpen((current) => !current)}
         aria-label={debugOpen ? 'Fermer le menu debug' : 'Ouvrir le menu debug'}
         title="Debug"
       />
 
+      <PwaInstallPrompt forceShow={forceInstallPrompt || forceIosPrompt} forceIos={forceIosPrompt} />
+      <RefreshedPrompt visible={refreshedPromptOpen} onDismiss={() => setRefreshedPromptOpen(false)} />
+
       {debugOpen ? (
-        <aside className="debug-overlay" role="dialog" aria-modal="false" aria-label="Menu debug">
-          <header className="debug-header">
+        <aside className="fixed top-4 right-4 bottom-4 w-[min(720px,calc(100vw-2rem))] grid grid-rows-[auto_auto_auto_minmax(0,1fr)] gap-3 p-4 bg-context-bg text-text border border-border rounded-[20px] shadow-[0_24px_80px_var(--color-shadow)] backdrop-blur-[10px] overflow-hidden z-30 max-lg:top-3 max-lg:right-3 max-lg:left-3 max-lg:bottom-3 max-lg:w-auto" role="dialog" aria-modal="false" aria-label="Menu debug">
+          <header className="flex gap-4 justify-between items-center max-lg:flex-col max-lg:items-stretch">
             <div>
-              <p className="debug-kicker">Mode debug</p>
-              <h1 className="debug-title">ENT minimal</h1>
-              <p className="hint">Cmd/Ctrl + Shift + D pour afficher ou masquer.</p>
+              <p className="m-0 mb-1 text-xs font-bold tracking-[0.08em] uppercase text-text-muted font-body">Mode debug</p>
+              <h1 className="m-0 text-xl font-bold">ENT minimal</h1>
+              <p className="m-0 text-[0.9rem] text-text-muted font-body">Cmd/Ctrl + Shift + D pour afficher ou masquer.</p>
             </div>
             <button
               type="button"
-              className="debug-control-button debug-control-button--ghost"
+              className="appearance-none border border-border rounded-[12px] bg-bg text-text py-[0.7rem] px-[0.9rem] font-inherit font-semibold leading-[1.1] disabled:opacity-45 disabled:cursor-wait"
               onClick={() => setDebugOpen(false)}
             >
               Fermer
             </button>
           </header>
 
-          <section className="debug-card">
-            <div className="status-row">
-              <span className={`status-pill ${sessionState.authenticated ? 'is-authenticated' : 'is-guest'}`}>
+          <section className="grid gap-3 p-4 border border-border rounded-2xl bg-bg-surface">
+            <div className="flex gap-3 justify-between items-center max-lg:flex-col max-lg:items-stretch">
+              <span className={`inline-flex items-center min-h-8 py-[0.35rem] px-3 rounded-full text-[0.92rem] font-semibold ${sessionState.authenticated ? 'bg-success-bg text-success-text' : 'bg-bg-subtle text-text-secondary'}`}>
                 {sessionLabel}
               </span>
               <button
                 type="button"
-                className="debug-control-button debug-control-button--ghost"
+                className="appearance-none border border-border rounded-[12px] bg-bg text-text py-[0.7rem] px-[0.9rem] font-inherit font-semibold leading-[1.1] disabled:opacity-45 disabled:cursor-wait"
                 onClick={() => void refreshSession({ exposeOutput: true })}
                 disabled={sessionState.checking}
               >
@@ -529,42 +538,44 @@ function App() {
             </div>
 
             {!sessionState.authenticated ? (
-              <form className="credentials-form" onSubmit={handleLogin}>
-                <div className="credentials-grid">
-                  <label className="field">
-                    <span>Identifiant</span>
+              <form className="grid gap-3" onSubmit={handleLogin}>
+                <div className="grid grid-cols-2 gap-3 max-lg:grid-cols-1">
+                  <label className="grid gap-[0.35rem] min-w-0">
+                    <span className="text-[0.85rem] font-semibold text-text-secondary font-body">Identifiant</span>
                     <input
                       ref={usernameInputRef}
                       autoComplete="username"
                       type="text"
+                      className="w-full min-w-0 py-3 px-[0.85rem] border border-border rounded-[12px] bg-bg text-text"
                       value={credentials.username}
                       onChange={(event) => setCredentials((current) => ({ ...current, username: event.target.value }))}
                     />
                   </label>
 
-                  <label className="field">
-                    <span>Mot de passe</span>
+                  <label className="grid gap-[0.35rem] min-w-0">
+                    <span className="text-[0.85rem] font-semibold text-text-secondary font-body">Mot de passe</span>
                     <input
                       autoComplete="current-password"
                       type="password"
+                      className="w-full min-w-0 py-3 px-[0.85rem] border border-border rounded-[12px] bg-bg text-text"
                       value={credentials.password}
                       onChange={(event) => setCredentials((current) => ({ ...current, password: event.target.value }))}
                     />
                   </label>
                 </div>
 
-                <div className="quick-actions">
-                  <LentButton type="submit" disabled={sessionState.checking}>
-                    {sessionState.checking ? 'Connexion...' : 'Se connecter'}
+                <div className="flex gap-3 flex-wrap max-lg:flex-col max-lg:items-stretch">
+                  <LentButton type="submit" loading={sessionState.checking}>
+                    Se connecter
                   </LentButton>
                 </div>
               </form>
             ) : (
-              <div className="user-row">
-                <p className="hint">Session active pour {sessionState.user ?? 'un utilisateur connecte'}.</p>
+              <div className="flex gap-3 justify-between items-center max-lg:flex-col max-lg:items-stretch">
+                <p className="m-0 text-[0.9rem] text-text-muted font-body">Session active pour {sessionState.user ?? 'un utilisateur connecte'}.</p>
                 <button
                   type="button"
-                  className="debug-control-button debug-control-button--ghost"
+                  className="appearance-none border border-border rounded-[12px] bg-bg text-text py-[0.7rem] px-[0.9rem] font-inherit font-semibold leading-[1.1] disabled:opacity-45 disabled:cursor-wait"
                   onClick={() => void handleLogout()}
                   disabled={sessionState.checking}
                 >
@@ -573,88 +584,69 @@ function App() {
               </div>
             )}
 
-            {sessionState.error ? <p className="error-message">{sessionState.error}</p> : null}
+            {sessionState.error ? <p className="m-0 text-error font-body">{sessionState.error}</p> : null}
           </section>
 
-          <section className="debug-card">
-            <div className="quick-actions">
-              <button
+          <section className="grid gap-3 p-4 border border-border rounded-2xl bg-bg-surface">
+            <div className="flex gap-3 flex-wrap max-lg:flex-col max-lg:items-stretch">
+                <button
                 type="button"
-                className="debug-control-button debug-control-button--ghost"
-                onClick={() => void runDebugAction('Account', () => getAccountInfo())}
-                disabled={debugState.loading}
+                className="appearance-none border border-border rounded-[12px] bg-bg text-text py-[0.7rem] px-[0.9rem] font-inherit font-semibold leading-[1.1]"
+                onClick={() => { setForceInstallPrompt(true); setTimeout(() => setForceInstallPrompt(false), 100) }}
               >
-                Account
+                PWA Prompt
               </button>
               <button
                 type="button"
-                className="debug-control-button debug-control-button--ghost"
-                onClick={() => void runDebugAction('Layout', () => getLayout())}
-                disabled={debugState.loading}
+                className="appearance-none border border-border rounded-[12px] bg-bg text-text py-[0.7rem] px-[0.9rem] font-inherit font-semibold leading-[1.1]"
+                onClick={() => { setForceIosPrompt(true); setTimeout(() => setForceIosPrompt(false), 100) }}
               >
-                Layout
+                PWA Prompt iOS
               </button>
-              <button
-                type="button"
-                className="debug-control-button debug-control-button--ghost"
-                onClick={() => void runDebugAction('Planning', () => getPlanning())}
-                disabled={debugState.loading}
-              >
-                Planning
-              </button>
-              <button
-                type="button"
-                className="debug-control-button debug-control-button--ghost"
-                onClick={() => void runDebugAction('Marketplace', () => getMarketplaceEntries())}
-                disabled={debugState.loading}
-              >
-                Marketplace
-              </button>
-              <button
-                type="button"
-                className="debug-control-button debug-control-button--ghost"
-                onClick={() => void runDebugAction('Grades', () => getGrades())}
-                disabled={debugState.loading}
-              >
-                Grades
-              </button>
-              <button
-                type="button"
-                className="debug-control-button debug-control-button--ghost"
-                onClick={() => void runDebugAction('Latest Grade', () => getLatestGrade())}
-                disabled={debugState.loading}
-              >
-                Latest Grade
-              </button>
+            {['Account', 'Layout', 'Planning', 'Marketplace', 'Grades', 'Latest Grade', 'Average Grade'].map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  className="appearance-none border border-border rounded-[12px] bg-bg text-text py-[0.7rem] px-[0.9rem] font-inherit font-semibold leading-[1.1] disabled:opacity-45 disabled:cursor-wait"
+                  onClick={() => void runDebugAction(label, () => {
+                    const actions = { Account: getAccountInfo, Layout: getLayout, Planning: getPlanning, Marketplace: getMarketplaceEntries, Grades: getGrades, 'Latest Grade': getLatestGrade, 'Average Grade': getAverageGrade }
+                    return actions[label]()
+                  })}
+                  disabled={debugState.loading}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
 
-            <form className="request-form" onSubmit={handleCustomRequest}>
-              <label className="field field-path">
-                <span>Endpoint ENT</span>
+            <form className="flex gap-3 items-end max-lg:flex-col max-lg:items-stretch" onSubmit={handleCustomRequest}>
+              <label className="grid gap-[0.35rem] min-w-0 flex-1">
+                <span className="text-[0.85rem] font-semibold text-text-secondary font-body">Endpoint ENT</span>
                 <input
                   type="text"
+                  className="w-full min-w-0 py-3 px-[0.85rem] border border-border rounded-[12px] bg-bg text-text"
                   value={requestPath}
                   onChange={(event) => setRequestPath(event.target.value)}
                   placeholder="/api/v4-3/dlm/layout.json"
                 />
               </label>
-              <LentButton type="submit" disabled={debugState.loading || !requestPath.trim()}>
+              <LentButton type="submit" className="shrink-0" disabled={debugState.loading || !requestPath.trim()}>
                 GET
               </LentButton>
             </form>
           </section>
 
-          <section className="debug-card debug-output-card">
-            <div className="debug-output-header">
+          <section className="grid gap-3 p-4 border border-border rounded-2xl bg-bg-surface min-h-0 grid-rows-[auto_auto_minmax(0,1fr)]">
+            <div className="flex gap-3 justify-between items-center max-lg:flex-col max-lg:items-stretch">
               <div>
                 <strong>{debugState.label || 'Sortie JSON'}</strong>
-                <p className="hint">Sortie JSON brute des appels locaux et proxifies.</p>
+                <p className="m-0 text-[0.9rem] text-text-muted font-body">Sortie JSON brute des appels locaux et proxifies.</p>
               </div>
-              {debugState.loading ? <span className="hint">Chargement...</span> : null}
+              {debugState.loading ? <span className="m-0 text-[0.9rem] text-text-muted font-body">Chargement...</span> : null}
             </div>
 
-            {debugState.error ? <p className="error-message">{debugState.error}</p> : null}
-            <pre className="debug-json">{output}</pre>
+            {debugState.error ? <p className="m-0 text-error font-body">{debugState.error}</p> : null}
+            <pre className="m-0 min-h-0 h-full overflow-auto p-4 rounded-[14px] border border-border bg-bg text-text text-[0.85rem] leading-[1.45] whitespace-pre-wrap break-words">{output}</pre>
           </section>
         </aside>
       ) : null}

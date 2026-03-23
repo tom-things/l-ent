@@ -1,11 +1,20 @@
-import './LentButton.css'
-
-function LentButton({ children, className = '', type = 'button', ...props }) {
-  const classes = ['lent-button', className].filter(Boolean).join(' ')
+function LentButton({ children, className = '', type = 'button', loading = false, ...props }) {
+  const disabled = props.disabled || loading
+  const classes = [
+    'lent-button min-h-[52px] px-7 py-[16px] border-0 rounded-[32px] bg-brand text-white font-semibold text-[17px] leading-[1.06] whitespace-nowrap transition-all duration-[180ms] ease-in-out hover:not-disabled:scale-[1.02] active:not-disabled:scale-[0.98] disabled:opacity-50 disabled:cursor-wait disabled:shadow-none relative',
+    className,
+  ].filter(Boolean).join(' ')
 
   return (
-    <button type={type} className={classes} {...props}>
-      <span className="lent-button__label">{children}</span>
+    <button type={type} className={classes} {...props} disabled={disabled}>
+      <span className={`block transition-opacity duration-150 ${loading ? 'opacity-0' : ''}`}>{children}</span>
+      {loading && (
+        <span className="absolute inset-0 flex items-center justify-center gap-[6px]">
+          <span className="lent-button-dot w-[5px] h-[5px] rounded-full bg-current" style={{ animationDelay: '0ms' }} />
+          <span className="lent-button-dot w-[5px] h-[5px] rounded-full bg-current" style={{ animationDelay: '140ms' }} />
+          <span className="lent-button-dot w-[5px] h-[5px] rounded-full bg-current" style={{ animationDelay: '280ms' }} />
+        </span>
+      )}
     </button>
   )
 }
