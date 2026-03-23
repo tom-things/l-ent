@@ -1030,6 +1030,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
+      workbox: {
+        navigateFallbackDenylist: [/^\/__ent_auth/, /^\/__ent_proxy/],
+      },
       manifest: {
         name: "l'ent",
         short_name: "l'ent",
