@@ -1,8 +1,71 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: var(--color-bg);
+  --color-bg-surface: var(--color-bg-surface);
+  --color-bg-subtle: var(--color-bg-subtle);
+  --color-bg-muted: var(--color-bg-muted);
+  --color-bg-input: var(--color-bg-input);
+  --color-widget-bg: var(--color-widget-bg);
+
+  --color-text: var(--color-text);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-muted: var(--color-text-muted);
+
+  --color-brand: var(--color-brand);
+  --color-brand-hover: var(--color-brand-hover);
+  --color-brand-subtle: var(--color-brand-subtle);
+
+  --color-border: var(--color-border);
+  --color-border-input: var(--color-border-input);
+
+  --color-error: var(--color-error);
+  --color-error-bg: var(--color-error-bg);
+  --color-success-bg: var(--color-success-bg);
+  --color-success-text: var(--color-success-text);
+  --color-favorite: var(--color-favorite);
+
+  --color-shadow: var(--color-shadow);
+  --color-backdrop: var(--color-backdrop);
+
+  --color-context-bg: var(--color-context-bg);
+  --color-context-hover: var(--color-context-hover);
+
+  --font-display: 'ABC Camera Plain', system-ui, sans-serif;
+  --font-body: 'Inter Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  --breakpoint-xs: 520px;
+  --breakpoint-sm: 600px;
+  --breakpoint-md: 640px;
+  --breakpoint-lg: 720px;
+  --breakpoint-xl: 860px;
+  --breakpoint-2xl: 900px;
+  --breakpoint-3xl: 960px;
+  --breakpoint-4xl: 1024px;
+
+  --animate-spin-slow: favorites-strip-spin 1s linear infinite;
+  --animate-shimmer: favorites-strip-shimmer 1.2s linear infinite;
+  --animate-context-menu-in: favorites-context-menu-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-context-action-in: favorites-context-menu-action-in 190ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-favorite-remove: favorites-strip-item-remove 220ms cubic-bezier(0.32, 0, 0.67, 0) forwards;
+  --animate-wave: wave 1s ease-in-out 0.4s;
+  --animate-modal-backdrop-in: weather-modal-backdrop-in 180ms ease-out;
+  --animate-modal-card-in: weather-modal-card-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
 @font-face {
-  font-family: 'Satoshi Variable';
-  src: url('./assets/fonts/Satoshi-Variable.ttf') format('truetype');
+  font-family: 'ABC Camera Plain';
+  src: url('./assets/fonts/ABCCameraPlainVariable-Trial.woff2') format('woff2');
   font-style: normal;
-  font-weight: 300 900;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Inter Variable';
+  src: url('./assets/fonts/InterVariable.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 900;
   font-display: swap;
 }
 
@@ -12,7 +75,9 @@ img {
 }
 
 :root {
-  font-family: 'Satoshi Variable', Satoshi, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'ABC Camera Plain', system-ui, sans-serif;
+  --font-body: 'Inter Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-display);
   line-height: 1.5;
   font-weight: 400;
   font-synthesis: none;
@@ -20,22 +85,22 @@ img {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  /* Semantic color tokens */
-  --color-bg: #ffffff;
-  --color-bg-surface: #f8f8f8;
-  --color-bg-subtle: #f7f7f7;
-  --color-bg-muted: #eeeeee;
-  --color-bg-input: #fbfbfb;
+  --color-bg: #FCFBF8;
+  --color-bg-surface: #efede7;
+  --color-bg-subtle: #edebe5;
+  --color-bg-muted: #e5e3dd;
+  --color-bg-input: #f3f1eb;
+  --color-widget-bg: #ffffff;
 
   --color-text: #111827;
-  --color-text-secondary: #4e645b;
+  --color-text-secondary: #6b7280;
   --color-text-muted: rgba(27, 27, 27, 0.6);
 
-  --color-brand: #003527;
-  --color-brand-hover: #002b1f;
-  --color-brand-subtle: rgba(0, 53, 39, 0.1);
+  --color-brand: #111827;
+  --color-brand-hover: #1f2937;
+  --color-brand-subtle: rgba(17, 24, 39, 0.08);
 
-  --color-border: rgba(0, 53, 39, 0.12);
+  --color-border: rgba(17, 24, 39, 0.1);
   --color-border-input: rgba(27, 27, 27, 0.16);
 
   --color-error: #b91c1c;
@@ -44,7 +109,7 @@ img {
   --color-success-text: #166534;
   --color-favorite: #eab308;
 
-  --color-shadow: rgba(0, 53, 39, 0.12);
+  --color-shadow: rgba(17, 24, 39, 0.1);
   --color-backdrop: rgba(27, 27, 27, 0.18);
 
   --color-context-bg: rgba(255, 255, 255, 0.98);
@@ -62,6 +127,7 @@ img {
     --color-bg-subtle: #1e1e1e;
     --color-bg-muted: #2a2a2a;
     --color-bg-input: #1a1a1a;
+    --color-widget-bg: #1c1c1c;
 
     --color-text: #e4e4e4;
     --color-text-secondary: #9ca3af;
@@ -88,10 +154,6 @@ img {
   }
 }
 
-* {
-  box-sizing: border-box;
-}
-
 html,
 body,
 #root {
@@ -104,6 +166,17 @@ body {
   margin: 0;
   min-width: 320px;
   background: var(--color-bg);
+}
+
+p,
+li,
+td,
+th,
+label,
+input,
+textarea,
+select {
+  font-family: var(--font-body);
 }
 
 button,
@@ -119,4 +192,24 @@ button:focus-visible,
 input:focus-visible {
   outline: 2px solid var(--color-text);
   outline-offset: 2px;
+}
+
+@keyframes pwa-slide-in {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes pwa-slide-out {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+
+@keyframes pwa-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pwa-backdrop-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }

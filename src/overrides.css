@@ -1,0 +1,409 @@
+/* ── Widget card box-shadow & dark mode border overrides ── */
+
+.widget-card {
+  opacity: 0;
+  transform: translateX(-16px);
+  transition-property: opacity, transform;
+  transition-duration: 320ms;
+  transition-timing-function: ease;
+  will-change: opacity, transform;
+}
+
+@media (prefers-color-scheme: dark) {
+  .widget-card {
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+}
+
+/* ── Primary button depth ── */
+
+.lent-button {
+  background: linear-gradient(180deg, #2a2a2a 0%, #111111 100%);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.12) inset,
+    0 6px 16px -4px rgba(0, 0, 0, 0.35),
+    0 2px 6px -2px rgba(0, 0, 0, 0.2);
+}
+
+.lent-button:hover:not(:disabled) {
+  background: linear-gradient(180deg, #333333 0%, #1a1a1a 100%);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.15) inset,
+    0 8px 20px -4px rgba(0, 0, 0, 0.4),
+    0 3px 8px -2px rgba(0, 0, 0, 0.25);
+}
+
+.lent-button:active:not(:disabled) {
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.08) inset,
+    0 2px 6px -2px rgba(0, 0, 0, 0.2);
+}
+
+@media (prefers-color-scheme: dark) {
+  .lent-button {
+    background: linear-gradient(180deg, #e8e8e8 0%, #d0d0d0 100%);
+    color: #111;
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.5) inset,
+      0 6px 16px -4px rgba(0, 0, 0, 0.5),
+      0 2px 6px -2px rgba(0, 0, 0, 0.3);
+  }
+
+  .lent-button:hover:not(:disabled) {
+    background: linear-gradient(180deg, #f0f0f0 0%, #dcdcdc 100%);
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.6) inset,
+      0 8px 20px -4px rgba(0, 0, 0, 0.55),
+      0 3px 8px -2px rgba(0, 0, 0, 0.35);
+  }
+
+  .lent-button:active:not(:disabled) {
+    background: linear-gradient(180deg, #d4d4d4 0%, #c0c0c0 100%);
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.3) inset,
+      0 2px 6px -2px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* ── Favorites strip scrollbar hide ── */
+
+.favorites-scroll-hide {
+  scrollbar-width: none;
+}
+
+.favorites-scroll-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Favorite search highlight pulse ── */
+
+.favorite-search-highlight {
+  animation: favorite-highlight-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes favorite-highlight-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(17, 24, 39, 0.15); }
+  50% { box-shadow: 0 0 0 2px rgba(17, 24, 39, 0.4); }
+}
+
+@media (prefers-color-scheme: dark) {
+  @keyframes favorite-highlight-pulse {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.15); }
+    50% { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4); }
+  }
+}
+
+/* ── App search input focus override ── */
+
+.app-search-input,
+.app-search-input:focus,
+.app-search-input:focus-visible {
+  outline: none !important;
+}
+
+/* ── Onboarding card depth ── */
+
+.onboarding-card {
+  --ring-color: rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 4px 12px -4px rgba(0, 0, 0, 0.08),
+    0 0 0 1px var(--ring-color);
+}
+
+.onboarding-card:hover {
+  --ring-color: rgba(0, 0, 0, 0.12);
+  box-shadow:
+    0 8px 20px -4px rgba(0, 0, 0, 0.12),
+    0 0 0 1px var(--ring-color);
+}
+
+@media (prefers-color-scheme: dark) {
+  .onboarding-card {
+    --ring-color: rgba(0, 0, 0, 0.88);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .onboarding-card:hover {
+    --ring-color: rgba(0, 0, 0, 0.88);
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+}
+
+/* ── Login left panel edge strokes ── */
+
+.login-left-panel {
+  box-shadow:
+    inset -1px 0 0 0 rgba(0, 0, 0, 0.08),
+    1px 0 0 0 rgba(255, 255, 255, 0.7);
+}
+
+@media (prefers-color-scheme: dark) {
+  .login-left-panel {
+    box-shadow:
+      inset -1px 0 0 0 rgba(255, 255, 255, 0.06),
+      1px 0 0 0 rgba(255, 255, 255, 0.04);
+  }
+}
+
+/* ── Login field depth (matches widget-card ring) ── */
+
+.login-field {
+  --ring-color: rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 4px 10px -3px rgba(0, 0, 0, 0.07),
+    0 0 0 1px var(--ring-color);
+}
+
+@media (prefers-color-scheme: dark) {
+  .login-field {
+    --ring-color: rgba(0, 0, 0, 0.88);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+}
+
+/* ── Weather gradient inner (uses inline CSS variable) ── */
+
+.weather-widget-inner {
+  background: var(--weather-gradient, transparent), var(--color-widget-bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  .weather-widget-inner {
+    background: var(--weather-gradient-dark, transparent), var(--color-widget-bg);
+  }
+}
+
+/* ── Greeting wave icon ── */
+
+.greeting-icon {
+  transform-origin: 70% 70%;
+}
+
+.widget-card-visible .greeting-icon {
+  animation: wave 1s ease-in-out 0.4s;
+}
+
+/* ── Widget card visibility ── */
+
+.widget-card-visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* ── Context menu transform-origin from CSS variables ── */
+
+.favorites-context-menu {
+  transform-origin: var(--favorites-context-origin-x, 24px)
+    var(--favorites-context-origin-y, 24px);
+}
+
+/* ── Grade widget transition (adds background-color for hover) ── */
+
+.latest-grade-widget,
+.average-grade-widget {
+  transition-property: opacity, transform, background-color;
+  transition-duration: 320ms, 320ms, 150ms;
+  transition-delay: 280ms, 280ms, 0ms;
+  transition-timing-function: ease;
+}
+
+/* ── Grade widget hover state ── */
+
+.latest-grade-widget:hover,
+.average-grade-widget:hover {
+  background: var(--color-bg-subtle);
+}
+
+@media (prefers-color-scheme: dark) {
+  .latest-grade-widget:hover,
+  .average-grade-widget:hover {
+    background: var(--color-bg-subtle);
+  }
+}
+
+.latest-grade-widget:hover .grade-corner-arrow,
+.average-grade-widget:hover .grade-corner-arrow {
+  opacity: 0.45;
+}
+
+/* ── Average grade wave dark mode ── */
+
+.average-grade-waves {
+  --stroke-0: #B7FF00;
+}
+
+@media (prefers-color-scheme: dark) {
+  .average-grade-waves {
+    --stroke-0: #3a6000;
+    opacity: 0.35;
+  }
+}
+
+/* ── Header refreshed tag depth ── */
+
+.header-refreshed-tag {
+  box-shadow:
+    0 2px 8px -2px rgba(0, 0, 0, 0.06),
+    0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  .header-refreshed-tag {
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 2px 8px -2px rgba(0, 0, 0, 0.2),
+      0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+}
+
+/* ── Header account button depth ── */
+
+.header-account-btn {
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.06),
+    0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+@media (prefers-color-scheme: dark) {
+  .header-account-btn {
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.2),
+      0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+}
+
+/* ── App icon depth + gradient stroke ── */
+
+.app-icon {
+  position: relative;
+}
+
+.app-icon::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid transparent;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), transparent 70%) border-box;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) padding-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) padding-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+@media (prefers-color-scheme: dark) {
+
+  .app-icon::after {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 70%) border-box;
+  }
+}
+
+/* ── App card favorite star overrides ── */
+
+.app-card-action:hover {
+  background: var(--color-brand-subtle);
+  opacity: 1 !important;
+}
+
+.app-card-action-favorite {
+  opacity: 1 !important;
+  color: var(--color-favorite);
+}
+
+/* ── Reduced motion ── */
+
+@media (prefers-reduced-motion: reduce) {
+  .widget-card {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .weather-modal-backdrop,
+  .weather-modal-card {
+    animation: none;
+  }
+
+  .favorites-strip-item,
+  .badge-icon-spinning,
+  .badge-placeholder,
+  .text-placeholder-shimmer,
+  .favorites-context-menu,
+  .favorites-context-action {
+    animation: none;
+    transition: none;
+    transform: none;
+  }
+}
+
+/* ── Keyframes ── */
+
+@keyframes lent-button-bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+.lent-button-dot {
+  animation: lent-button-bounce 1s ease-in-out infinite;
+}
+
+@keyframes wave {
+  0% { transform: rotate(0deg); }
+  15% { transform: rotate(14deg); }
+  30% { transform: rotate(-8deg); }
+  45% { transform: rotate(14deg); }
+  60% { transform: rotate(-4deg); }
+  75% { transform: rotate(10deg); }
+  100% { transform: rotate(0deg); }
+}
+
+@keyframes favorites-strip-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes favorites-strip-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@keyframes favorites-context-menu-in {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes favorites-context-menu-action-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes favorites-strip-item-remove {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(10px); }
+}
+
+@keyframes weather-modal-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes weather-modal-card-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes app-card-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── App card staggered entrance ── */
+
+.app-card-enter {
+  animation: app-card-enter 350ms ease both;
+}
