@@ -228,13 +228,8 @@
 
 /* ── Average grade wave dark mode ── */
 
-.average-grade-waves {
-  --stroke-0: #B7FF00;
-}
-
 @media (prefers-color-scheme: dark) {
   .average-grade-waves {
-    --stroke-0: #3a6000;
     opacity: 0.35;
   }
 }

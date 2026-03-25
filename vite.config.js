@@ -8,6 +8,8 @@ const ENT_ORIGIN = 'https://services-numeriques.univ-rennes.fr'
 const CAS_ORIGIN = 'https://sso-cas.univ-rennes.fr'
 const PLANNING_ORIGIN = 'https://planning.univ-rennes1.fr'
 const PLANNING_SERVICE_URL = `${PLANNING_ORIGIN}/direct/myplanning.jsp`
+const ADE_ORIGIN = 'https://campus-app.univ-rennes.fr'
+const ADE_API_BASE = `${ADE_ORIGIN}/api`
 const DEFAULT_REFERER = `${ENT_ORIGIN}/f/services/normal/render.uP`
 const LOCAL_SESSION_COOKIE = 'ent_front_session'
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000
@@ -634,6 +636,66 @@ async function establishPlanningSession(jar) {
   return { moduleBase, strongName, rpcHeaders, ticket }
 }
 
+// Headers matching the campus-app web client exactly (from HAR capture).
+const ADE_APP_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+  'Content-Type': 'application/json; charset=utf-8',
+  'Accept': 'application/json',
+  'Origin': 'https://campus-app.univ-rennes.fr',
+  'Referer': 'https://campus-app.univ-rennes.fr/web/',
+  'x-app-version': '2.4.5',
+  'x-lang': 'fr',
+  'x-nav-lang': 'fr-FR',
+  'deviceid': 'null',
+  'devicemodel': '',
+  'devicemanufacturer': 'Google Inc.',
+  'deviceos': 'Web',
+  'deviceversion': '20030107',
+}
+
+async function authenticateToAde(jar, credentials) {
+  if (!credentials) {
+    return { session: null, error: 'No credentials available for ADE login' }
+  }
+
+  // The campus-app API uses direct username/password login (not CAS tickets).
+  const reqBody = JSON.stringify({ username: credentials.username, password: credentials.password, etab: 'UR' })
+  const reqHeaders = { ...ADE_APP_HEADERS, 'session': 'null' }
+  console.log('[ADE] POST /api/auth/login', { headers: reqHeaders, bodyLength: reqBody.length, bodyPreview: reqBody.replace(/"password":"[^"]*"/, '"password":"***"') })
+
+  const loginResponse = await fetch(`${ADE_API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: reqHeaders,
+    body: reqBody,
+  })
+  const loginText = await loginResponse.text()
+  console.log('[ADE] Response:', loginResponse.status, loginText.substring(0, 500))
+  console.log('[ADE] Response headers:', Object.fromEntries(loginResponse.headers.entries()))
+
+  let loginData = null
+  try { loginData = JSON.parse(loginText) } catch { /* not JSON */ }
+
+  const session = loginData?.sessionId ?? loginData?.session ?? loginData?.token ?? null
+
+  return { session, loginStatus: loginResponse.status, loginData }
+}
+
+async function fetchAdeApi(path, session) {
+  const url = `${ADE_API_BASE}${path}`
+  const response = await fetch(url, {
+    headers: {
+      ...ADE_APP_HEADERS,
+      'session': session || 'null',
+    },
+  })
+
+  const text = await response.text()
+  let data
+  try { data = JSON.parse(text) } catch { data = text }
+
+  return { ok: response.ok, status: response.status, data, text }
+}
+
 function createEntDevAuthPlugin() {
   const sessions = new Map()
 
@@ -994,6 +1056,108 @@ function createEntDevAuthPlugin() {
         sendJson(res, 500, {
           error: error instanceof Error ? error.message : String(error),
         })
+      }
+    })
+
+    // ==== ADE Schedule API ====
+
+    middlewares.use('/__ent_auth/ade/status', async (req, res, next) => {
+      if (req.method !== 'GET') { next(); return }
+
+      try {
+        // Status is a public health-check — try without auth first.
+        const result = await fetchAdeApi('/timetable/getAdeStatus', null)
+        sendJson(res, 200, { ok: result.ok, status: result.status, data: result.data })
+      } catch (error) {
+        sendJson(res, 502, { ok: false, error: error instanceof Error ? error.message : String(error) })
+      }
+    })
+
+    middlewares.use('/__ent_auth/ade/tree', async (req, res, next) => {
+      if (req.method !== 'GET') { next(); return }
+
+      try {
+        const entSession = getSessionFromRequest(req, sessions)
+        if (!entSession) { sendJson(res, 200, { authenticated: false, tree: null }); return }
+
+        const authResult = await authenticateToAde(entSession.jar, entSession.credentials)
+        const url = new URL(req.url, 'http://localhost')
+        const etabsVets = url.searchParams.get('etabsVets') || ''
+        const apiPath = etabsVets
+          ? `/timetable/getVetTree?etabsVets=${encodeURIComponent(etabsVets)}`
+          : '/timetable/getVetTree'
+        const result = await fetchAdeApi(apiPath, authResult.session)
+
+        sendJson(res, 200, { authenticated: true, tree: result.data, debug: { apiStatus: result.status, apiOk: result.ok, ...authResult } })
+      } catch (error) {
+        sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) })
+      }
+    })
+
+    middlewares.use('/__ent_auth/ade/search', async (req, res, next) => {
+      if (req.method !== 'GET') { next(); return }
+
+      try {
+        const entSession = getSessionFromRequest(req, sessions)
+        if (!entSession) { sendJson(res, 200, { authenticated: false, results: null }); return }
+
+        const url = new URL(req.url, 'http://localhost')
+        const query = url.searchParams.get('q') || ''
+        if (!query.trim()) { sendJson(res, 400, { error: 'Query parameter "q" is required.' }); return }
+
+        const authResult = await authenticateToAde(entSession.jar, entSession.credentials)
+        const result = await fetchAdeApi(`/timetable/vetSearch?q=${encodeURIComponent(query)}`, authResult.session)
+
+        sendJson(res, 200, { authenticated: true, results: result.data, debug: { apiStatus: result.status, apiOk: result.ok, ...authResult } })
+      } catch (error) {
+        sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) })
+      }
+    })
+
+    middlewares.use('/__ent_auth/ade/timetable', async (req, res, next) => {
+      if (req.method !== 'GET') { next(); return }
+
+      try {
+        const entSession = getSessionFromRequest(req, sessions)
+        if (!entSession) { sendJson(res, 200, { authenticated: false, timetable: null }); return }
+
+        const authResult = await authenticateToAde(entSession.jar, entSession.credentials)
+        const url = new URL(req.url, 'http://localhost')
+        const params = new URLSearchParams()
+        params.set('date', url.searchParams.get('date') || new Date().toISOString().split('T')[0])
+        params.set('nbDays', url.searchParams.get('nbDays') || '14')
+        params.set('refresh', url.searchParams.get('refresh') || '0')
+
+        for (const [key, value] of url.searchParams.entries()) {
+          if (!params.has(key)) params.set(key, value)
+        }
+
+        const result = await fetchAdeApi(`/timetable/getLastFromResources?${params.toString()}`, authResult.session)
+
+        sendJson(res, 200, { authenticated: true, timetable: result.data, debug: { apiStatus: result.status, apiOk: result.ok, ...authResult } })
+      } catch (error) {
+        sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) })
+      }
+    })
+
+    middlewares.use('/__ent_auth/ade/alerts', async (req, res, next) => {
+      if (req.method !== 'GET') { next(); return }
+
+      try {
+        const entSession = getSessionFromRequest(req, sessions)
+        if (!entSession) { sendJson(res, 200, { authenticated: false, alerts: null }); return }
+
+        const authResult = await authenticateToAde(entSession.jar, entSession.credentials)
+        const url = new URL(req.url, 'http://localhost')
+        const etabsVets = url.searchParams.get('etabsVets') || ''
+        const apiPath = etabsVets
+          ? `/timetable/getADEGlobalAlerts?etabsVets=${encodeURIComponent(etabsVets)}`
+          : '/timetable/getADEGlobalAlerts'
+        const result = await fetchAdeApi(apiPath, authResult.session)
+
+        sendJson(res, 200, { authenticated: true, alerts: result.data, debug: { apiStatus: result.status, apiOk: result.ok, ...authResult } })
+      } catch (error) {
+        sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) })
       }
     })
 

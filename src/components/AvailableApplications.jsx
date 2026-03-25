@@ -1229,11 +1229,11 @@ function AvailableApplications({ establishment = null }) {
       </div>
 
       {viewState.status === 'loading' ? (
-        <div className="flex items-center flex-wrap gap-[8px_14px] overflow-visible max-md:flex-col max-md:items-stretch max-md:gap-2" role="status" aria-live="polite">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div key={`loading-favorite-${index}`} className="inline-flex items-center gap-[10px] max-w-full py-2 px-[6px] rounded-[18px] min-w-[140px] max-md:w-full max-md:gap-2 max-md:py-[6px] max-md:px-1" aria-hidden="true">
-              <span className="badge-placeholder inline-flex items-center justify-center w-[47px] h-[47px] rounded-[25px] bg-[linear-gradient(90deg,var(--color-bg-muted)_0%,var(--color-bg-subtle)_50%,var(--color-bg-muted)_100%)] bg-[length:200%_100%] animate-shimmer shrink-0 max-md:w-[42px] max-md:h-[42px]" />
-              <span className="text-placeholder-shimmer w-[92px] h-[14px] rounded-full bg-[linear-gradient(90deg,var(--color-bg-muted)_0%,var(--color-bg-subtle)_50%,var(--color-bg-muted)_100%)] bg-[length:200%_100%] animate-shimmer" />
+        <div className="flex items-center flex-wrap gap-[8px_14px] overflow-visible max-md:flex-nowrap max-md:items-start max-md:gap-0 max-md:overflow-x-auto max-md:-mx-4 max-md:px-4 favorites-scroll-hide" role="status" aria-live="polite">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={`loading-favorite-${index}`} className="inline-flex items-center gap-[10px] max-w-full py-2 px-[6px] rounded-[18px] min-w-[140px] max-md:flex-col max-md:items-center max-md:gap-1.5 max-md:py-2 max-md:px-1 max-md:min-w-0 max-md:rounded-xl max-md:w-[76px] max-md:shrink-0" aria-hidden="true">
+              <span className="badge-placeholder inline-flex items-center justify-center w-[47px] h-[47px] rounded-[25px] bg-[linear-gradient(90deg,var(--color-bg-muted)_0%,var(--color-bg-subtle)_50%,var(--color-bg-muted)_100%)] bg-[length:200%_100%] animate-shimmer shrink-0 max-md:w-[52px] max-md:h-[52px] max-md:rounded-[14px]" />
+              <span className="text-placeholder-shimmer w-[92px] h-[14px] rounded-full bg-[linear-gradient(90deg,var(--color-bg-muted)_0%,var(--color-bg-subtle)_50%,var(--color-bg-muted)_100%)] bg-[length:200%_100%] animate-shimmer max-md:w-[48px] max-md:h-[10px]" />
             </div>
           ))}
         </div>
@@ -1257,7 +1257,7 @@ function AvailableApplications({ establishment = null }) {
       ) : null}
 
       {shouldShowFavoriteRow ? (
-        <div className={`flex items-center flex-wrap gap-[8px_10px] overflow-visible max-md:flex-col max-md:items-stretch max-md:gap-0 ${isDragging ? '[&_a:hover]:bg-transparent [&_a:focus-visible]:bg-transparent' : ''}`} ref={favoritesRowRef}>
+        <div className={`flex items-center flex-wrap gap-[8px_10px] overflow-visible max-md:flex-nowrap max-md:items-start max-md:gap-3 max-md:overflow-x-auto max-md:overflow-y-hidden max-md:-mx-4 max-md:px-4 favorites-scroll-hide ${isDragging ? '[&_a:hover]:bg-transparent [&_a:focus-visible]:bg-transparent' : ''}`} ref={favoritesRowRef}>
           {orderedFavorites.map((application, index) => {
             const applicationKey = getApplicationKey(application)
             const resolvedLaunch = launchTargets[applicationKey]
@@ -1273,7 +1273,7 @@ function AvailableApplications({ establishment = null }) {
               <a
                 key={application.id}
                 data-app-id={application.id}
-                className={`favorites-strip-item inline-flex items-center gap-2.5 max-w-full py-1.5 px-1.5 pr-4 rounded-[16px] text-inherit no-underline transition-[background-color,box-shadow] duration-[120ms] ease-in-out min-w-0 hover:bg-bg-subtle/60 focus-visible:bg-bg-subtle/60 focus-visible:outline-none cursor-pointer max-md:w-full max-md:py-2.5 max-md:px-2 max-md:pr-3 max-md:border-b max-md:border-border/30 max-md:rounded-none ${isLaunching ? 'pointer-events-none cursor-progress' : ''} ${(isRemovingFavorite || isExitingFavorite) ? 'pointer-events-none' : ''} ${isExitingFavorite ? 'animate-favorite-remove' : ''} ${isContextOpen ? 'bg-context-hover' : ''} ${isSearchHighlighted ? 'favorite-search-highlight' : ''}`}
+                className={`favorites-strip-item inline-flex items-center gap-2.5 max-w-full py-1.5 px-1.5 pr-4 rounded-[16px] text-inherit no-underline transition-[background-color,box-shadow] duration-[120ms] ease-in-out min-w-0 hover:bg-bg-subtle/60 focus-visible:bg-bg-subtle/60 focus-visible:outline-none cursor-pointer max-md:flex-col max-md:items-center max-md:gap-1.5 max-md:py-2 max-md:px-1 max-md:pr-1 max-md:rounded-xl max-md:w-[76px] max-md:shrink-0 ${isLaunching ? 'pointer-events-none cursor-progress' : ''} ${(isRemovingFavorite || isExitingFavorite) ? 'pointer-events-none' : ''} ${isExitingFavorite ? 'animate-favorite-remove' : ''} ${isContextOpen ? 'bg-context-hover' : ''} ${isSearchHighlighted ? 'favorite-search-highlight' : ''}`}
                 href={href}
                 target={target || undefined}
                 rel={target === '_blank' ? 'noreferrer' : undefined}
@@ -1290,7 +1290,7 @@ function AvailableApplications({ establishment = null }) {
                 onClick={(event) => void handleApplicationClick(event, application)}
               >
                 <span
-                  className="app-icon inline-flex items-center justify-center w-[36px] h-[36px] rounded-[10px] bg-widget-bg shadow-sm text-brand shrink-0 max-md:w-[34px] max-md:h-[34px]"
+                  className="app-icon inline-flex items-center justify-center w-[36px] h-[36px] rounded-[10px] bg-widget-bg shadow-sm text-brand shrink-0 max-md:w-[52px] max-md:h-[52px] max-md:rounded-[14px]"
                   aria-hidden="true"
                   style={getAppIcon(application.title) ? undefined : { backgroundColor: getLetterStyle(application.title).bg, color: getLetterStyle(application.title).fg }}
                 >
@@ -1311,7 +1311,7 @@ function AvailableApplications({ establishment = null }) {
                     </span>
                   )}
                 </span>
-                <span className="text-[15px] font-semibold leading-[1.06] whitespace-nowrap overflow-hidden text-ellipsis min-w-0">
+                <span className="text-[15px] font-semibold leading-[1.06] whitespace-nowrap overflow-hidden text-ellipsis min-w-0 max-md:text-[13px] max-md:leading-[1.2] max-md:text-center max-md:whitespace-normal max-md:line-clamp-2 max-md:overflow-visible">
                   {isLaunching ? 'Opening...' : application.title}
                 </span>
               </a>

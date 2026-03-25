@@ -83,10 +83,10 @@ function WidgetLatestGrade({ visible = false }) {
             style={{ background: accentColor }}
             aria-hidden="true"
           >
-            <div className="absolute inset-0 rounded-[25px] mix-blend-plus-lighter" style={{ background: `linear-gradient(180deg, rgba(255,255,255,0.5) 0%, transparent 70%)` }} />
+            <div className="absolute inset-0 rounded-[25px]" style={{ background: `linear-gradient(180deg, rgba(255,255,255,0.5) 0%, transparent 70%)` }} />
           </div>
           <div className="flex items-end gap-[3px] leading-[1.06]">
-            <span className="text-[37px] font-bold leading-[1.06] whitespace-nowrap max-md:text-[32px]">{noteDisplay}</span>
+            <span className="text-[37px] font-bold leading-none whitespace-nowrap max-md:text-[32px]">{noteDisplay}</span>
             <span className="text-[19px] font-medium leading-[1.06] whitespace-nowrap pb-[3px] max-md:text-[17px]">/{noteMax}</span>
           </div>
         </div>

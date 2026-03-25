@@ -401,6 +401,106 @@ export async function getLatestGrade() {
   return latest ?? { error: 'Aucune note trouvée.' }
 }
 
+// ============================================================================
+// ADE Schedule API
+// ============================================================================
+
+const ADE_TIMETABLE_CACHE_KEY = 'l-ent:ade-timetable-cache'
+const ADE_TIMETABLE_CACHE_TTL_MS = 15 * 60 * 1000
+
+export async function getAdeStatus() {
+  const response = await fetch(`${ENT_AUTH_PREFIX}/ade/status`, {
+    credentials: 'same-origin',
+  })
+
+  return parseJsonPayload(response)
+}
+
+export async function getAdeTree(etabsVets = '') {
+  const params = etabsVets ? `?etabsVets=${encodeURIComponent(etabsVets)}` : ''
+  const response = await fetch(`${ENT_AUTH_PREFIX}/ade/tree${params}`, {
+    credentials: 'same-origin',
+  })
+
+  return parseJsonPayload(response)
+}
+
+export async function searchAde(query) {
+  if (!query?.trim()) {
+    return { results: [] }
+  }
+
+  const response = await fetch(
+    `${ENT_AUTH_PREFIX}/ade/search?q=${encodeURIComponent(query.trim())}`,
+    { credentials: 'same-origin' },
+  )
+
+  return parseJsonPayload(response)
+}
+
+export async function getAdeTimetable({ date, force = false, ...extra } = {}) {
+  if (!force) {
+    try {
+      const raw = localStorage.getItem(ADE_TIMETABLE_CACHE_KEY)
+      if (raw) {
+        const cached = JSON.parse(raw)
+        if (cached?.data && Date.now() - cached.cachedAt < ADE_TIMETABLE_CACHE_TTL_MS) {
+          // Only return cache if the requested date matches
+          if (!date || cached.date === date) {
+            return cached.data
+          }
+        }
+      }
+    } catch {
+      // ignore corrupt cache
+    }
+  }
+
+  const params = new URLSearchParams()
+  if (date) params.set('date', date)
+  for (const [key, value] of Object.entries(extra)) {
+    if (value != null) params.set(key, String(value))
+  }
+  const qs = params.toString()
+
+  const response = await fetch(
+    `${ENT_AUTH_PREFIX}/ade/timetable${qs ? `?${qs}` : ''}`,
+    { credentials: 'same-origin' },
+  )
+
+  const data = await parseJsonPayload(response)
+
+  if (data.authenticated && data.timetable) {
+    try {
+      localStorage.setItem(
+        ADE_TIMETABLE_CACHE_KEY,
+        JSON.stringify({ data, date: date || new Date().toISOString().split('T')[0], cachedAt: Date.now() }),
+      )
+    } catch {
+      // storage full
+    }
+  }
+
+  return data
+}
+
+export function clearAdeTimetableCache() {
+  localStorage.removeItem(ADE_TIMETABLE_CACHE_KEY)
+}
+
+export async function getAdeAlerts(etabsVets = '') {
+  const params = etabsVets ? `?etabsVets=${encodeURIComponent(etabsVets)}` : ''
+  const response = await fetch(`${ENT_AUTH_PREFIX}/ade/alerts${params}`, {
+    credentials: 'same-origin',
+  })
+
+  return parseJsonPayload(response)
+}
+
+// ============================================================================
+// ENT Portal API
+// ============================================================================
+
 export function getLayout(auth) {
   return requestEnt('/api/v4-3/dlm/layout.json', { auth })
 }

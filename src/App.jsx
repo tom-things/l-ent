@@ -10,6 +10,10 @@ import OnboardingPage, { getStoredEstablishment, ESTABLISHMENT_KEY } from './com
 import WidgetContainer from './components/WidgetContainer'
 import {
   getAccountInfo,
+  getAdeAlerts,
+  getAdeStatus,
+  getAdeTimetable,
+  getAdeTree,
   getAuthSession,
   getAverageGrade,
   getGrades,
@@ -20,6 +24,7 @@ import {
   loginToEnt,
   logoutFromEnt,
   requestEnt,
+  searchAde,
 } from './entApi'
 
 const DEFAULT_REQUEST_PATH = '/api/v4-3/dlm/layout.json'
@@ -165,6 +170,7 @@ function App() {
     password: '',
   })
   const [requestPath, setRequestPath] = useState(DEFAULT_REQUEST_PATH)
+  const [adeSearchQuery, setAdeSearchQuery] = useState('')
   const [establishment, setEstablishment] = useState(getStoredEstablishment)
   const cachedSession = useRef(loadCachedSession()).current
   const [sessionState, setSessionState] = useState({
@@ -617,6 +623,46 @@ function App() {
                   {label}
                 </button>
               ))}
+            </div>
+
+            <div className="mt-1">
+              <p className="m-0 mb-2 text-xs font-bold tracking-[0.08em] uppercase text-text-muted font-body">ADE Schedule API</p>
+              <div className="flex gap-3 flex-wrap max-lg:flex-col max-lg:items-stretch">
+                {['ADE Status', 'ADE Tree', 'ADE Timetable', 'ADE Alerts'].map((label) => (
+                  <button
+                    key={label}
+                    type="button"
+                    className="appearance-none border border-border rounded-[12px] bg-bg text-text py-[0.7rem] px-[0.9rem] font-inherit font-semibold leading-[1.1] disabled:opacity-45 disabled:cursor-wait"
+                    onClick={() => void runDebugAction(label, () => {
+                      const actions = {
+                        'ADE Status': () => getAdeStatus(),
+                        'ADE Tree': () => getAdeTree(),
+                        'ADE Timetable': () => getAdeTimetable({ force: true }),
+                        'ADE Alerts': () => getAdeAlerts(),
+                      }
+                      return actions[label]()
+                    })}
+                    disabled={debugState.loading}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <form className="flex gap-3 items-end mt-3 max-lg:flex-col max-lg:items-stretch" onSubmit={(event) => { event.preventDefault(); void runDebugAction(`ADE Search: ${adeSearchQuery}`, () => searchAde(adeSearchQuery)) }}>
+                <label className="grid gap-[0.35rem] min-w-0 flex-1">
+                  <span className="text-[0.85rem] font-semibold text-text-secondary font-body">ADE Search</span>
+                  <input
+                    type="text"
+                    className="w-full min-w-0 py-3 px-[0.85rem] border border-border rounded-[12px] bg-bg text-text"
+                    value={adeSearchQuery}
+                    onChange={(event) => setAdeSearchQuery(event.target.value)}
+                    placeholder="Cours, prof, groupe..."
+                  />
+                </label>
+                <LentButton type="submit" className="shrink-0" disabled={debugState.loading || !adeSearchQuery.trim()}>
+                  Search
+                </LentButton>
+              </form>
             </div>
 
             <form className="flex gap-3 items-end max-lg:flex-col max-lg:items-stretch" onSubmit={handleCustomRequest}>

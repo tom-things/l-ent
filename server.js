@@ -17,6 +17,8 @@ const ENT_ORIGIN = 'https://services-numeriques.univ-rennes.fr'
 const CAS_ORIGIN = 'https://sso-cas.univ-rennes.fr'
 const PLANNING_ORIGIN = 'https://planning.univ-rennes1.fr'
 const PLANNING_SERVICE_URL = `${PLANNING_ORIGIN}/direct/myplanning.jsp`
+const ADE_ORIGIN = 'https://campus-app.univ-rennes.fr'
+const ADE_API_BASE = `${ADE_ORIGIN}/api`
 const DEFAULT_REFERER = `${ENT_ORIGIN}/f/services/normal/render.uP`
 const LOCAL_SESSION_COOKIE = 'ent_front_session'
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000
@@ -578,6 +580,108 @@ function unescapeIcal(value) {
 }
 
 // ============================================================================
+// ADE (campus-app) HELPERS
+// ============================================================================
+
+// Headers matching the campus-app web client exactly.
+const ADE_APP_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+  'Content-Type': 'application/json',
+  'Accept': 'application/json',
+  'x-app-version': '2.4.5',
+  'x-lang': 'fr',
+  'x-nav-lang': 'fr-FR',
+  'deviceid': 'null',
+  'devicemodel': '',
+  'devicemanufacturer': 'l-ent',
+  'deviceos': 'Web',
+  'deviceversion': '20030107',
+}
+
+async function authenticateToAde(jar) {
+  // Step 1: Get a CAS service ticket for campus-app.
+  const serviceUrl = `${ADE_ORIGIN}/`
+  const casLoginUrl = `${CAS_ORIGIN}/login?service=${encodeURIComponent(serviceUrl)}`
+
+  const casResult = await followRedirectChain(casLoginUrl, jar, {
+    headers: {
+      Accept: 'text/html,application/xhtml+xml,application/json,*/*',
+      'User-Agent': ADE_APP_HEADERS['User-Agent'],
+    },
+  })
+  await casResult.response.text()
+
+  // Extract CAS ticket and the actual service URL from the redirect chain.
+  // CAS appends ?ticket=ST-xxx to the registered service URL.
+  let ticket = null
+  let actualServiceUrl = serviceUrl
+
+  for (const hop of casResult.chain) {
+    for (const candidate of [hop.location, hop.url]) {
+      if (!candidate) continue
+      const match = candidate.match(/^([^?]+)\?.*ticket=([^&]+)/)
+      if (match) {
+        actualServiceUrl = match[1]
+        ticket = match[2]
+      }
+    }
+  }
+
+  if (!ticket) {
+    const finalMatch = casResult.finalUrl.match(/^([^?]+)\?.*ticket=([^&]+)/)
+    if (finalMatch) {
+      actualServiceUrl = finalMatch[1]
+      ticket = finalMatch[2]
+    }
+  }
+
+  if (!ticket) {
+    return { session: null, ticket: null, error: 'No CAS ticket obtained', finalUrl: casResult.finalUrl }
+  }
+
+  // Step 2: Exchange the CAS ticket for a session UUID.
+  // The service URL in the body must match what CAS used to issue the ticket.
+  const loginResponse = await fetch(`${ADE_API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: {
+      ...ADE_APP_HEADERS,
+      'session': 'null',
+    },
+    body: JSON.stringify({ ticket, service: actualServiceUrl }),
+  })
+  const loginText = await loginResponse.text()
+  let loginData = null
+  try { loginData = JSON.parse(loginText) } catch { /* not JSON */ }
+
+  const session = loginData?.sessionId ?? loginData?.session ?? loginData?.token ?? null
+
+  return {
+    session,
+    ticket,
+    loginStatus: loginResponse.status,
+    loginData,
+    actualServiceUrl,
+    finalUrl: casResult.finalUrl,
+  }
+}
+
+async function fetchAdeApi(path, session) {
+  const url = `${ADE_API_BASE}${path}`
+  const response = await fetch(url, {
+    headers: {
+      ...ADE_APP_HEADERS,
+      'session': session || 'null',
+    },
+  })
+
+  const text = await response.text()
+  let data
+  try { data = JSON.parse(text) } catch { data = text }
+
+  return { ok: response.ok, status: response.status, data, text }
+}
+
+// ============================================================================
 // EXPRESS MIDDLEWARE AND ROUTES
 // ============================================================================
 
@@ -954,7 +1058,105 @@ app.get('/__ent_auth/grades', async (req, res) => {
   }
 })
 
-// 7. Logout Endpoint
+// ============================================================================
+// ADE SCHEDULE API ENDPOINTS
+// ============================================================================
+
+// 7. ADE Status
+app.get('/__ent_auth/ade/status', async (req, res) => {
+  try {
+    const result = await fetchAdeApi('/timetable/getAdeStatus', null)
+    res.status(200).json({ ok: result.ok, status: result.status, data: result.data })
+  } catch (error) {
+    res.status(502).json({ ok: false, error: error instanceof Error ? error.message : String(error) })
+  }
+})
+
+// 8. ADE VET Tree
+app.get('/__ent_auth/ade/tree', async (req, res) => {
+  try {
+    const entSession = getSessionFromRequest(req)
+    if (!entSession) return res.status(200).json({ authenticated: false, tree: null })
+
+    const authResult = await authenticateToAde(entSession.jar)
+    const etabsVets = req.query.etabsVets || ''
+    const apiPath = etabsVets
+      ? `/timetable/getVetTree?etabsVets=${encodeURIComponent(etabsVets)}`
+      : '/timetable/getVetTree'
+    const result = await fetchAdeApi(apiPath, authResult.session)
+
+    setSessionCookie(res, entSession)
+    res.status(200).json({ authenticated: true, tree: result.data, debug: { apiStatus: result.status, apiOk: result.ok, ...authResult } })
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
+  }
+})
+
+// 9. ADE Search
+app.get('/__ent_auth/ade/search', async (req, res) => {
+  try {
+    const entSession = getSessionFromRequest(req)
+    if (!entSession) return res.status(200).json({ authenticated: false, results: null })
+
+    const query = req.query.q || ''
+    if (!query.trim()) return res.status(400).json({ error: 'Query parameter "q" is required.' })
+
+    const authResult = await authenticateToAde(entSession.jar)
+    const result = await fetchAdeApi(`/timetable/vetSearch?q=${encodeURIComponent(query)}`, authResult.session)
+
+    setSessionCookie(res, entSession)
+    res.status(200).json({ authenticated: true, results: result.data, debug: { apiStatus: result.status, apiOk: result.ok, ...authResult } })
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
+  }
+})
+
+// 10. ADE Timetable
+app.get('/__ent_auth/ade/timetable', async (req, res) => {
+  try {
+    const entSession = getSessionFromRequest(req)
+    if (!entSession) return res.status(200).json({ authenticated: false, timetable: null })
+
+    const authResult = await authenticateToAde(entSession.jar)
+    const params = new URLSearchParams()
+    params.set('date', req.query.date || new Date().toISOString().split('T')[0])
+    params.set('nbDays', req.query.nbDays || '14')
+    params.set('refresh', req.query.refresh || '0')
+
+    for (const [key, value] of Object.entries(req.query)) {
+      if (!params.has(key)) params.set(key, value)
+    }
+
+    const result = await fetchAdeApi(`/timetable/getLastFromResources?${params.toString()}`, authResult.session)
+
+    setSessionCookie(res, entSession)
+    res.status(200).json({ authenticated: true, timetable: result.data, debug: { apiStatus: result.status, apiOk: result.ok, ...authResult } })
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
+  }
+})
+
+// 11. ADE Global Alerts
+app.get('/__ent_auth/ade/alerts', async (req, res) => {
+  try {
+    const entSession = getSessionFromRequest(req)
+    if (!entSession) return res.status(200).json({ authenticated: false, alerts: null })
+
+    const authResult = await authenticateToAde(entSession.jar)
+    const etabsVets = req.query.etabsVets || ''
+    const apiPath = etabsVets
+      ? `/timetable/getADEGlobalAlerts?etabsVets=${encodeURIComponent(etabsVets)}`
+      : '/timetable/getADEGlobalAlerts'
+    const result = await fetchAdeApi(apiPath, authResult.session)
+
+    setSessionCookie(res, entSession)
+    res.status(200).json({ authenticated: true, alerts: result.data, debug: { apiStatus: result.status, apiOk: result.ok, ...authResult } })
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
+  }
+})
+
+// 12. Logout Endpoint
 app.post('/__ent_auth/logout', (req, res) => {
   res.clearCookie(LOCAL_SESSION_COOKIE)
   res.status(200).json({

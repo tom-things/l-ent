@@ -1,5 +1,5 @@
 <svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 241.8 110.8" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g id="Vector 3" filter="url(#filter0_f_0_4)" style="mix-blend-mode:plus-lighter">
+<g id="Vector 3" filter="url(#filter0_f_0_4)">
 <path d="M28.9 81.9C57.9105 81.9 80.1554 59.1162 100.638 38.5714C106.429 32.7623 113.207 28.9 120.9 28.9C128.593 28.9 135.371 32.7623 141.162 38.5714C161.645 59.1162 183.889 81.9 212.9 81.9" stroke="url(#paint0_linear_0_4)" stroke-width="4" stroke-linecap="round"/>
 </g>
 <defs>
@@ -10,7 +10,7 @@
 </filter>
 <linearGradient id="paint0_linear_0_4" x1="120.9" y1="28.9" x2="120.9" y2="81.9" gradientUnits="userSpaceOnUse">
 <stop stop-color="#FEFFFA"/>
-<stop offset="1" stop-color="#121212"/>
+<stop offset="1" stop-color="#FEFFFA" stop-opacity="0"/>
 </linearGradient>
 </defs>
 </svg>

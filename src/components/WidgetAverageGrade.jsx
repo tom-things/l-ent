@@ -4,8 +4,8 @@ import { ENT_AUTH_PREFIX, getAverageGrade } from '../entApi'
 
 const NOTES9_DOAUTH = 'https://notes9.iutlan.univ-rennes1.fr/services/doAuth.php?href=https://notes9.iutlan.univ-rennes1.fr/'
 const NOTES9_HREF = `${ENT_AUTH_PREFIX}/launch?url=${encodeURIComponent(NOTES9_DOAUTH)}`
-import waveGlow from '../assets/wave-avg-1.svg'
-import waveLine from '../assets/wave-avg-2.svg'
+import waveGlowLight from '../assets/wave-glow-light.png'
+import waveGlowDark from '../assets/wave-glow-dark.png'
 
 function WidgetAverageGrade({ visible = false }) {
   const [data, setData] = useState(null)
@@ -41,12 +41,12 @@ function WidgetAverageGrade({ visible = false }) {
       </div>
 
       <div className="average-grade-waves absolute bottom-0 left-0 right-0 h-[60px] pointer-events-none" aria-hidden="true">
-        <img src={waveGlow} alt="" className="absolute bottom-0 left-0 w-full h-full object-fill" />
-        <img src={waveLine} alt="" className="absolute bottom-0 left-0 w-full h-full object-fill mix-blend-plus-lighter" />
+        <img src={waveGlowLight} alt="" className="absolute bottom-0 left-0 w-full h-full object-fill dark:hidden" />
+        <img src={waveGlowDark} alt="" className="absolute bottom-0 left-0 w-full h-full object-fill hidden dark:block" />
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center relative z-10">
-        <span className="text-[37px] font-bold leading-[1.06] tracking-[0.01em] max-md:text-[32px]">{avgDisplay}</span>
+        <span className="text-[37px] font-bold leading-none tracking-[0.01em] max-md:text-[32px]">{avgDisplay}</span>
         {promoDisplay ? (
           <span className="text-base font-medium leading-[1.06] opacity-60 dark:opacity-80 max-md:text-[15px]">
             Moy. Promo : {promoDisplay}

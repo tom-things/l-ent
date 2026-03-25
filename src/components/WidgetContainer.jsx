@@ -40,43 +40,151 @@ function getGreetingSubtitle(date = new Date()) {
 
   const messages = {
     lundi: {
-      morning: 'On lance la semaine.',
-      afternoon: 'Lundi file, on garde le cap.',
-      evening: 'Lundi plié, cap sur la suite.',
+      morning: [
+        'On lance la semaine.',
+        'Nouveau lundi, nouvelles idées.',
+        'La semaine commence bien.',
+        'Lundi matin, tout est possible.',
+      ],
+      afternoon: [
+        'Lundi file, on garde le cap.',
+        'L\u2019après-midi avance, le rythme est bon.',
+        'Lundi déroule tranquillement.',
+        'On tient la cadence ce lundi.',
+      ],
+      evening: [
+        'Lundi plié, cap sur la suite.',
+        'Premier jour bouclé, bien joué.',
+        'Lundi se termine en douceur.',
+        'La soirée s\u2019installe, lundi est fait.',
+      ],
     },
     mardi: {
-      morning: 'Mardi démarre déjà en rythme.',
-      afternoon: 'Mardi tient la cadence sans broncher.',
-      evening: 'Mardi se termine proprement.',
+      morning: [
+        'Mardi démarre déjà en rythme.',
+        'Deuxième jour, même énergie.',
+        'Mardi matin, on enchaîne.',
+        'Le mardi s\u2019annonce productif.',
+      ],
+      afternoon: [
+        'Mardi tient la cadence sans broncher.',
+        'L\u2019après-midi file, mardi roule.',
+        'On est bien lancé ce mardi.',
+        'Mardi après-midi, le rythme est là.',
+      ],
+      evening: [
+        'Mardi se termine proprement.',
+        'Mardi soir, deux jours de faits.',
+        'On range mardi, bien avancé.',
+        'La soirée mardi, tranquille.',
+      ],
     },
     mercredi: {
-      morning: 'Mercredi léger, idées bien réveillées.',
-      afternoon: 'Mercredi roule sans perdre le fil.',
-      evening: 'Mercredi s\u2019étire tout en douceur.',
+      morning: [
+        'Mercredi léger, idées bien réveillées.',
+        'Milieu de semaine, on garde le fil.',
+        'Mercredi matin, à mi-chemin.',
+        'Le mercredi démarre au calme.',
+      ],
+      afternoon: [
+        'Mercredi roule sans perdre le fil.',
+        'La moitié est passée, on continue.',
+        'Mercredi après-midi, bonne dynamique.',
+        'Le cap du milieu est franchi.',
+      ],
+      evening: [
+        'Mercredi s\u2019étire tout en douceur.',
+        'Mercredi soir, le plus dur est fait.',
+        'Mi-semaine bouclée, on souffle.',
+        'Mercredi se pose tranquillement.',
+      ],
     },
     jeudi: {
-      morning: 'Jeudi pose de bonnes bases.',
-      afternoon: 'Jeudi avance, proprement.',
-      evening: 'Jeudi se range, mission tenue.',
+      morning: [
+        'Jeudi pose de bonnes bases.',
+        'Jeudi matin, la fin se dessine.',
+        'Avant-dernier jour, on garde le rythme.',
+        'Jeudi s\u2019installe avec énergie.',
+      ],
+      afternoon: [
+        'Jeudi avance, proprement.',
+        'L\u2019après-midi jeudi, on voit le bout.',
+        'Jeudi file, le week-end approche.',
+        'Encore un effort, jeudi déroule.',
+      ],
+      evening: [
+        'Jeudi se range, mission tenue.',
+        'Jeudi soir, presque au bout.',
+        'Plus qu\u2019un jour après ce soir.',
+        'Jeudi se termine, on y est presque.',
+      ],
     },
     vendredi: {
-      morning: 'Vendredi arrive avec un bel élan.',
-      afternoon: 'Dernière ligne droite avant le week-end.',
-      evening: 'Vendredi soir, souffle mérité.',
+      morning: [
+        'Vendredi arrive avec un bel élan.',
+        'Dernier jour, on finit bien.',
+        'Vendredi matin, l\u2019énergie est là.',
+        'On voit le week-end d\u2019ici.',
+      ],
+      afternoon: [
+        'Dernière ligne droite avant le week-end.',
+        'Vendredi après-midi, presque libre.',
+        'Le week-end est à portée de main.',
+        'On boucle la semaine en beauté.',
+      ],
+      evening: [
+        'Vendredi soir, souffle mérité.',
+        'La semaine est dans la poche.',
+        'Vendredi soir, le week-end commence.',
+        'Bien joué cette semaine.',
+      ],
     },
     samedi: {
-      morning: 'Samedi tranquille, rythme plus libre.',
-      afternoon: 'Samedi doux pour faire à son tempo.',
-      evening: 'Samedi calme, esprit léger.',
+      morning: [
+        'Samedi tranquille, rythme plus libre.',
+        'Samedi matin, pas de pression.',
+        'Le week-end commence doucement.',
+        'Samedi s\u2019éveille à son rythme.',
+      ],
+      afternoon: [
+        'Samedi doux pour faire à son tempo.',
+        'L\u2019après-midi samedi, à toi de jouer.',
+        'Samedi défile, profite bien.',
+        'Un samedi après-midi bien mérité.',
+      ],
+      evening: [
+        'Samedi calme, esprit léger.',
+        'Samedi soir, on décompresse.',
+        'La soirée samedi, tout en relax.',
+        'Samedi se termine bien.',
+      ],
     },
     dimanche: {
-      morning: 'Dimanche doux avant la relance.',
-      afternoon: 'Dimanche prend son temps.',
-      evening: 'Dimanche soir, on prépare la suite.',
+      morning: [
+        'Dimanche doux avant la relance.',
+        'Dimanche matin, on prend son temps.',
+        'Dernière grasse mat\u2019 avant lundi.',
+        'Dimanche s\u2019éveille sans se presser.',
+      ],
+      afternoon: [
+        'Dimanche prend son temps.',
+        'Dimanche après-midi, on recharge.',
+        'Profite de ce dimanche tranquille.',
+        'Le dimanche file, savoure-le.',
+      ],
+      evening: [
+        'Dimanche soir, on prépare la suite.',
+        'Demain c\u2019est reparti, on est prêt.',
+        'Dimanche se clôt, la semaine attend.',
+        'On recharge avant la reprise.',
+      ],
     },
   }
 
-  return messages[weekday]?.[dayPeriod] ?? "Bonne journée sur l'université de Rennes."
+  const pool = messages[weekday]?.[dayPeriod]
+  if (!pool) return 'Bonne journée !'
+  const dayOfYear = Math.floor((date - new Date(date.getFullYear(), 0, 0)) / 86400000)
+  return pool[dayOfYear % pool.length]
 }
 
 function WidgetContainer({
@@ -227,13 +335,13 @@ function WidgetContainer({
   return (
     <section className="w-full grid gap-8 pt-6 px-10 pb-10 max-md:px-4 max-md:pt-4 max-md:pb-8 max-md:gap-6" aria-label="Widgets">
       <div className="flex flex-wrap gap-5 items-stretch max-2xl:gap-[14px] max-md:gap-[10px]">
-        <article className={`widget-card shadow-md flex-[0_1_217px] min-h-[120px] p-5 border border-white rounded-[1.75rem] overflow-hidden bg-widget-bg text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-[min(280px,100%)] max-md:min-h-[108px] max-md:p-4 max-md:rounded-3xl max-xs:flex-[1_1_100%] max-xs:min-w-0 flex flex-col justify-end gap-[3px] text-text ${areWidgetsVisible ? 'widget-card-visible delay-[80ms]' : ''}`}>
+        <article className={`widget-card shadow-md flex-[0_1_217px] min-h-[120px] p-5 border border-white rounded-[1.75rem] overflow-hidden bg-widget-bg text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-[min(280px,100%)] max-md:min-h-[108px] max-md:p-4 max-md:rounded-3xl max-xs:flex-[1_1_calc(50%-5px)] max-xs:min-w-0 flex flex-col justify-end gap-[3px] text-text ${areWidgetsVisible ? 'widget-card-visible delay-[80ms]' : ''}`}>
           <Icon icon="ph:hand-waving" className="greeting-icon w-10 h-10 text-inherit shrink-0 max-md:w-[34px] max-md:h-[34px]" aria-hidden="true" />
           <h2 className="m-0 leading-[1.06] text-2xl font-bold max-md:text-[22px]">Salut {displayName} !</h2>
           <p className="m-0 leading-[1.06] text-base font-medium max-md:text-[15px]">{greetingSubtitle}</p>
         </article>
 
-        <article className={`widget-card shadow-md flex-[0_1_217px] min-h-[120px] border border-white rounded-[1.75rem] overflow-hidden bg-widget-bg text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-[min(280px,100%)] max-md:min-h-[108px] max-md:rounded-3xl max-xs:flex-[1_1_100%] max-xs:min-w-0 flex p-0 max-md:p-0 ${areWidgetsVisible ? 'widget-card-visible delay-[180ms]' : ''}`}>
+        <article className={`widget-card shadow-md flex-[0_1_217px] min-h-[120px] border border-white rounded-[1.75rem] overflow-hidden bg-widget-bg text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-[min(280px,100%)] max-md:min-h-[108px] max-md:rounded-3xl max-xs:flex-[1_1_calc(50%-5px)] max-xs:min-w-0 flex p-0 max-md:p-0 ${areWidgetsVisible ? 'widget-card-visible delay-[180ms]' : ''}`}>
           <div
             className="weather-widget-inner flex-1 flex flex-col justify-end gap-[3px] p-5 rounded-[18px] text-text max-md:w-full max-md:min-h-full max-md:p-4 max-md:rounded-[15px]"
             style={{ '--weather-gradient': weatherState.gradient, '--weather-gradient-dark': weatherState.gradientDark }}
