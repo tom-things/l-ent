@@ -3,7 +3,12 @@ import { Icon } from '@iconify/react'
 
 /* global __BUILD_HASH__ */
 
-function AboutModal({ open, onClose }) {
+function AboutModal({
+  open,
+  onClose,
+  demoLinkLabel = '',
+  onDemoLinkClick = null,
+}) {
   useEffect(() => {
     if (!open) return undefined
     function handleKeyDown(event) {
@@ -14,6 +19,9 @@ function AboutModal({ open, onClose }) {
   }, [open, onClose])
 
   if (!open) return null
+
+  const shouldShowDemoLink = typeof onDemoLinkClick === 'function' && demoLinkLabel.trim()
+
   return (
     <div
       className="weather-modal-backdrop fixed inset-0 z-40 flex items-center justify-center bg-backdrop p-5 animate-modal-backdrop-in max-sm:p-[14px]"
@@ -73,6 +81,17 @@ function AboutModal({ open, onClose }) {
             <p className="m-0 text-text-muted text-[12px] font-mono">
               {import.meta.env.DEV ? 'dev' : `build ${typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev'}`}
             </p>
+            {shouldShowDemoLink ? (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  className="p-0 border-0 bg-transparent text-text-muted font-inherit text-[13px] font-medium leading-[1.35] underline underline-offset-2 transition-colors duration-[120ms] hover:text-text"
+                  onClick={onDemoLinkClick}
+                >
+                  {demoLinkLabel}
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       </section>

@@ -10,6 +10,7 @@ import OnboardingCompletionPage from './components/OnboardingCompletionPage'
 import PwaInstallPrompt from './components/PwaInstallPrompt'
 import OnboardingPage from './components/OnboardingPage'
 import PwaUpdateManager from './components/PwaUpdateManager'
+import { DEMO_CREDENTIALS } from './demoAccount'
 import {
   ESTABLISHMENT_KEY,
   STUDENT_TP_KEY,
@@ -1720,6 +1721,52 @@ function App() {
     }
   }
 
+  async function handleDemoLogin() {
+    setCredentials({
+      username: DEMO_CREDENTIALS.username,
+      password: DEMO_CREDENTIALS.password,
+    })
+
+    setSessionState((current) => ({
+      ...current,
+      checking: true,
+      error: '',
+    }))
+    setDebugState((current) => ({
+      ...current,
+      loading: true,
+      label: 'Connexion demo',
+      error: '',
+    }))
+
+    try {
+      const result = await loginToEnt(DEMO_CREDENTIALS)
+      setCredentials((current) => ({
+        ...current,
+        password: '',
+      }))
+      commitDebugState('Connexion demo', result)
+      await refreshSession()
+    } catch (error) {
+      const message = getFrenchAuthErrorMessage(error, 'login')
+      clearLegacySensitiveClientCaches()
+      setSessionState({
+        checking: false,
+        authenticated: false,
+        user: null,
+        givenName: null,
+        account: null,
+        degraded: false,
+        degradedReason: null,
+        sessionSource: null,
+        canUseServerLaunch: false,
+        warning: '',
+        error: message,
+      })
+      commitDebugState('Connexion demo', null, message)
+    }
+  }
+
   async function handleLogout() {
     setSessionState((current) => ({
       ...current,
@@ -2000,6 +2047,7 @@ function App() {
           checking={sessionState.checking}
           errorMessage={sessionState.error}
           onCredentialsChange={(field, value) => setCredentials((current) => ({ ...current, [field]: value }))}
+          onDemoLogin={() => void handleDemoLogin()}
           onSubmit={handleLogin}
         />
       )}
@@ -2007,7 +2055,7 @@ function App() {
         open={isAccountModalOpen}
         onClose={handleCloseAccountModal}
         onApply={handleAccountModalApply}
-        onManageAccount={handleManageAccount}
+        onManageAccount={sessionState.user === DEMO_CREDENTIALS.username ? null : handleManageAccount}
         onYearChange={handleAccountModalYearChange}
         onTdChange={handleAccountModalTdChange}
         onTpChange={handleAccountModalTpChange}

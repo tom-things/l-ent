@@ -3,6 +3,12 @@ export const ENT_PROXY_PREFIX = '/__ent_proxy'
 export const ENT_AUTH_PREFIX = '/__ent_auth'
 export const DEFAULT_REFERER = `${ENT_ORIGIN}/f/services/normal/render.uP`
 const DEFAULT_ACCEPT = 'application/json, text/html;q=0.9, text/plain;q=0.8, */*;q=0.5'
+const DEMO_SESSION_MODE = 'demo'
+let currentSessionMode = null
+
+function setCurrentSessionMode(nextMode) {
+  currentSessionMode = nextMode === DEMO_SESSION_MODE ? DEMO_SESSION_MODE : null
+}
 
 function normalizeProxyPath(input) {
   if (!input) {
@@ -122,10 +128,25 @@ export async function requestEnt(path, options = {}) {
     body = '',
     headers = {},
   } = options
+  const normalizedPath = normalizeProxyPath(path)
   const upperMethod = method.toUpperCase()
   const hasBody = body !== '' && body !== undefined && body !== null && !['GET', 'HEAD'].includes(upperMethod)
 
-  const response = await fetch(`${ENT_PROXY_PREFIX}${normalizeProxyPath(path)}`, {
+  if (currentSessionMode === DEMO_SESSION_MODE) {
+    const response = await fetch(
+      `${ENT_AUTH_PREFIX}/demo/request?path=${encodeURIComponent(normalizedPath)}`,
+      {
+        method: upperMethod,
+        credentials: 'same-origin',
+        headers: hasBody ? headers : undefined,
+        body: hasBody ? body : undefined,
+      },
+    )
+
+    return parseResponse(response)
+  }
+
+  const response = await fetch(`${ENT_PROXY_PREFIX}${normalizedPath}`, {
     method: upperMethod,
     credentials: 'same-origin',
     headers: buildFetchHeaders(auth, headers),
@@ -140,7 +161,9 @@ export async function getAuthSession() {
     credentials: 'same-origin',
   })
 
-  return parseJsonPayload(response)
+  const payload = await parseJsonPayload(response)
+  setCurrentSessionMode(payload?.authenticated ? payload?.sessionMode : null)
+  return payload
 }
 
 export async function loginToEnt({ username, password }) {
@@ -156,7 +179,9 @@ export async function loginToEnt({ username, password }) {
     body: JSON.stringify({ username, password }),
   })
 
-  return parseJsonPayload(response)
+  const payload = await parseJsonPayload(response)
+  setCurrentSessionMode(payload?.authenticated ? payload?.sessionMode : null)
+  return payload
 }
 
 export async function logoutFromEnt() {
@@ -168,7 +193,9 @@ export async function logoutFromEnt() {
     credentials: 'same-origin',
   })
 
-  return parseJsonPayload(response)
+  const payload = await parseJsonPayload(response)
+  setCurrentSessionMode(null)
+  return payload
 }
 
 export function getPortalBootstrap(auth) {

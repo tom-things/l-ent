@@ -12,10 +12,17 @@ function LoginPage({
   checking,
   errorMessage,
   onCredentialsChange,
+  onDemoLogin,
   onSubmit,
 }) {
   const [showPassword, setShowPassword] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
+
+  function handleDemoLinkClick() {
+    setAboutOpen(false)
+    onDemoLogin?.()
+  }
+
   return (
     <section className="flex w-full min-h-screen bg-bg" aria-label="Login page">
       <div
@@ -42,7 +49,12 @@ function LoginPage({
         </div>
       </div>
 
-      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <AboutModal
+        open={aboutOpen}
+        onClose={() => setAboutOpen(false)}
+        demoLinkLabel="Accéder à la démo"
+        onDemoLinkClick={handleDemoLinkClick}
+      />
 
       <div className="flex-[1_1_auto] min-w-0 min-h-screen relative flex justify-center items-stretch bg-bg max-4xl:w-full max-4xl:items-center max-md:justify-start">
         <button
