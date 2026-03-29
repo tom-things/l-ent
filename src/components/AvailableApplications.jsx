@@ -1639,7 +1639,7 @@ function AvailableApplications({ establishment = null, canUseServerLaunch = true
                   </span>
                   <button
                     type="button"
-                    className={`app-card-action flex items-center justify-center w-8 h-8 rounded-full border-none bg-transparent text-text-muted opacity-0 cursor-pointer transition-[opacity,background-color,color] duration-[120ms] ease-in-out shrink-0 group-hover:opacity-60 group-focus-visible:opacity-60 focus-visible:opacity-60 ${isFavorite ? 'app-card-action-favorite' : ''}`}
+                    className="app-card-action flex items-center justify-center w-8 h-8 rounded-full border-none bg-transparent text-text-muted opacity-0 cursor-pointer transition-[opacity,background-color,color] duration-[120ms] ease-in-out shrink-0 group-hover:opacity-60 group-focus-visible:opacity-60 focus-visible:opacity-60"
                     aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
                     onClick={(event) => {
                       event.preventDefault()
@@ -1652,7 +1652,7 @@ function AvailableApplications({ establishment = null, canUseServerLaunch = true
                       }
                     }}
                   >
-                    <Icon icon={isFavorite ? 'carbon:star-filled' : 'carbon:star'} className="w-[18px] h-[18px]" aria-hidden="true" />
+                    <Icon icon="carbon:star" className="w-[18px] h-[18px]" aria-hidden="true" />
                   </button>
                 </a>
               )

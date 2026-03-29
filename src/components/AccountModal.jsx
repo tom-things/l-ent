@@ -276,13 +276,15 @@ function AccountModal({
               {planningState.applying ? '...' : 'Appliquer'}
             </button>
 
-            <button
-              type="button"
-              className="inline-flex h-[46px] items-center justify-center rounded-full border border-white bg-white px-[13px] font-display text-[16px] font-normal leading-[24px] tracking-[-0.3125px] text-[var(--color-text)] shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition-colors duration-[120ms] ease-in-out hover:bg-[#f8f7f3] dark:border-[var(--color-border)] dark:bg-[var(--color-bg-surface)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] dark:hover:bg-[var(--color-bg-subtle)] max-sm:w-full"
-              onClick={onManageAccount}
-            >
-              Gérer mon compte sur Sésame
-            </button>
+            {typeof onManageAccount === 'function' ? (
+              <button
+                type="button"
+                className="inline-flex h-[46px] items-center justify-center rounded-full border border-white bg-white px-[13px] font-display text-[16px] font-normal leading-[24px] tracking-[-0.3125px] text-[var(--color-text)] shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition-colors duration-[120ms] ease-in-out hover:bg-[#f8f7f3] dark:border-[var(--color-border)] dark:bg-[var(--color-bg-surface)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] dark:hover:bg-[var(--color-bg-subtle)] max-sm:w-full"
+                onClick={onManageAccount}
+              >
+                Gérer mon compte sur Sésame
+              </button>
+            ) : null}
           </div>
         </div>
       </section>

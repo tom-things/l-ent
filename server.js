@@ -11,6 +11,27 @@ import {
 } from './adeApi.js'
 import { createAdeUpcomingResolver } from './adeUpcomingResolver.js'
 import { createPlanningRpcClient } from './planningRpc.js'
+import {
+  DEMO_ACCOUNT,
+  DEMO_SESSION_MODE,
+  applyDemoLayoutMutation,
+  buildDemoAdeTreePayload,
+  buildDemoAlertsPayload,
+  buildDemoCalendarPayload,
+  buildDemoGradesPayload,
+  buildDemoLayoutData,
+  buildDemoLayoutDocData,
+  buildDemoMarketplaceEntries,
+  buildDemoPlanningPayload,
+  buildDemoPortletFragment,
+  buildDemoPortletMetadata,
+  buildDemoTimetablePayload,
+  buildDemoUpcomingPayload,
+  createInitialDemoState,
+  isDemoCredentials,
+  normalizeDemoState,
+  searchDemoAdeTree,
+} from './src/demoAccount.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -252,6 +273,121 @@ function buildPersistedSessionJar(session) {
   return session.jar.serialize().filter(isPersistableSessionCookie)
 }
 
+function isDemoSession(session) {
+  return session?.mode === DEMO_SESSION_MODE
+}
+
+function createDemoSession(overrides = {}) {
+  return {
+    id: overrides.id ?? randomUUID(),
+    mode: DEMO_SESSION_MODE,
+    user: overrides.user ?? DEMO_ACCOUNT.preferred_username,
+    jar: overrides.jar instanceof CookieJar ? overrides.jar : new CookieJar(),
+    demoState: normalizeDemoState(overrides.demoState ?? createInitialDemoState()),
+    createdAt: overrides.createdAt ?? Date.now(),
+    sessionSource: overrides.sessionSource ?? null,
+  }
+}
+
+function buildDemoRequestPayload(requestPath, session) {
+  const normalizedPath = String(requestPath ?? '').trim()
+
+  if (!normalizedPath.startsWith('/')) {
+    return {
+      ok: false,
+      status: 400,
+      contentType: 'application/json; charset=utf-8',
+      body: JSON.stringify({ error: 'Invalid demo request path.' }),
+    }
+  }
+
+  const requestUrl = new URL(normalizedPath, 'https://demo.l-ent.local')
+
+  if (requestUrl.pathname === '/api/v4-3/dlm/layout.json') {
+    return {
+      ok: true,
+      status: 200,
+      contentType: 'application/json; charset=utf-8',
+      body: JSON.stringify(buildDemoLayoutData(session.demoState)),
+    }
+  }
+
+  if (requestUrl.pathname === '/api/layoutDoc') {
+    return {
+      ok: true,
+      status: 200,
+      contentType: 'application/json; charset=utf-8',
+      body: JSON.stringify(buildDemoLayoutDocData()),
+    }
+  }
+
+  if (requestUrl.pathname === '/api/marketplace/entries.json') {
+    return {
+      ok: true,
+      status: 200,
+      contentType: 'application/json; charset=utf-8',
+      body: JSON.stringify(buildDemoMarketplaceEntries()),
+    }
+  }
+
+  const portletFragmentMatch = requestUrl.pathname.match(/^\/api\/v4-3\/portlet\/([^/]+)\.html$/)
+  if (portletFragmentMatch) {
+    const fragment = buildDemoPortletFragment(decodeURIComponent(portletFragmentMatch[1]))
+    return fragment == null
+      ? {
+          ok: false,
+          status: 404,
+          contentType: 'text/plain; charset=utf-8',
+          body: 'Demo portlet not found.',
+        }
+      : {
+          ok: true,
+          status: 200,
+          contentType: 'text/html; charset=utf-8',
+          body: fragment,
+        }
+  }
+
+  const portletMetadataMatch = requestUrl.pathname.match(/^\/api\/portlet\/([^/]+)\.json$/)
+  if (portletMetadataMatch) {
+    const metadata = buildDemoPortletMetadata(decodeURIComponent(portletMetadataMatch[1]))
+    return metadata == null
+      ? {
+          ok: false,
+          status: 404,
+          contentType: 'application/json; charset=utf-8',
+          body: JSON.stringify({ error: 'Demo portlet metadata not found.' }),
+        }
+      : {
+          ok: true,
+          status: 200,
+          contentType: 'application/json; charset=utf-8',
+          body: JSON.stringify(metadata),
+        }
+  }
+
+  if (requestUrl.pathname === '/api/layout') {
+    const mutation = applyDemoLayoutMutation(normalizedPath, session.demoState)
+
+    if (mutation.handled) {
+      session.demoState = mutation.demoState
+      return {
+        ok: true,
+        status: 200,
+        contentType: 'application/json; charset=utf-8',
+        body: JSON.stringify(mutation.payload ?? { ok: true }),
+      }
+    }
+  }
+
+  return {
+    ok: false,
+    status: 404,
+    contentType: 'application/json; charset=utf-8',
+    body: JSON.stringify({ error: `Demo path not implemented: ${normalizedPath}` }),
+  }
+}
+
 function pruneRuntimeSessions() {
   const now = Date.now()
 
@@ -309,7 +445,9 @@ function setSessionCookie(res, session) {
   const data = {
     id: session.id,
     user: session.user,
+    mode: session.mode ?? null,
     jar: buildPersistedSessionJar(session),
+    demoState: isDemoSession(session) ? normalizeDemoState(session.demoState) : null,
     createdAt: session.createdAt,
   }
   res.cookie(LOCAL_SESSION_COOKIE, encodeSession(data), {
@@ -589,6 +727,14 @@ function buildEntProxyTargetUrl(requestUrl) {
 }
 
 function getSessionLaunchCapabilities(session) {
+  if (isDemoSession(session)) {
+    return {
+      canUseServerLaunch: false,
+      degraded: false,
+      degradedReason: null,
+    }
+  }
+
   const canUseServerLaunch = Boolean(session?.jar?.hasCookie('sso-cas.univ-rennes.fr', 'TGC'))
 
   return {
@@ -608,6 +754,16 @@ function getSessionFromRequest(req) {
   if (runtimeSession) {
     runtimeSession.sessionSource = 'runtime'
     return runtimeSession
+  }
+
+  if (data.mode === DEMO_SESSION_MODE) {
+    return createDemoSession({
+      id: data.id,
+      user: data.user,
+      demoState: data.demoState,
+      createdAt: data.createdAt,
+      sessionSource: 'cookie',
+    })
   }
 
   return {
@@ -982,7 +1138,7 @@ async function previewServerLaunch(targetUrl, session) {
       finalUrl: targetUrl,
       chain: [],
       useServerLaunch: false,
-      reason: 'missing-cas-tgc',
+      reason: isDemoSession(session) ? 'demo-session' : 'missing-cas-tgc',
       ...launchCapabilities,
     }
   }
@@ -1428,10 +1584,22 @@ app.get('/__ent_auth/session', async (req, res) => {
       return res.status(200).json({
         authenticated: false,
         user: null,
+        sessionMode: null,
         sessionSource: null,
         degraded: false,
         degradedReason: null,
         canUseServerLaunch: false,
+      })
+    }
+
+    if (isDemoSession(session)) {
+      setSessionCookie(res, session)
+      return res.status(200).json({
+        authenticated: true,
+        user: session.user,
+        sessionMode: DEMO_SESSION_MODE,
+        sessionSource: session.sessionSource ?? null,
+        ...getSessionLaunchCapabilities(session),
       })
     }
 
@@ -1443,6 +1611,7 @@ app.get('/__ent_auth/session', async (req, res) => {
       return res.status(200).json({
         authenticated: false,
         user: null,
+        sessionMode: null,
         sessionSource: null,
         degraded: false,
         degradedReason: null,
@@ -1457,6 +1626,7 @@ app.get('/__ent_auth/session', async (req, res) => {
     res.status(200).json({
       authenticated: true,
       user: layout.data.user,
+      sessionMode: session.mode ?? null,
       sessionSource: session.sessionSource ?? null,
       cookieNames: session.jar.getCookieNamesForHost('services-numeriques.univ-rennes.fr'),
       casCookieNames: session.jar.getCookieNamesForHost('sso-cas.univ-rennes.fr'),
@@ -1489,6 +1659,18 @@ app.post('/__ent_auth/login', async (req, res) => {
       })
     }
 
+    if (isDemoCredentials(username, password)) {
+      const session = createDemoSession()
+      clearLoginRateLimit(req, username)
+      setSessionCookie(res, session)
+
+      return res.status(200).json({
+        authenticated: true,
+        user: session.user,
+        sessionMode: DEMO_SESSION_MODE,
+      })
+    }
+
     const result = await performEntLogin({ username, password })
     clearLoginRateLimit(req, username)
     const session = {
@@ -1514,6 +1696,7 @@ app.post('/__ent_auth/login', async (req, res) => {
     res.status(200).json({
       authenticated: true,
       user: result.layout.user,
+      sessionMode: session.mode ?? null,
     })
   } catch (error) {
     const rateLimit = recordLoginFailure(req, req.body?.username)
@@ -1540,6 +1723,16 @@ app.get('/__ent_auth/account', async (req, res) => {
       return res.status(200).json({
         authenticated: false,
         account: null,
+        sessionMode: null,
+      })
+    }
+
+    if (isDemoSession(session)) {
+      setSessionCookie(res, session)
+      return res.status(200).json({
+        authenticated: true,
+        account: DEMO_ACCOUNT,
+        sessionMode: DEMO_SESSION_MODE,
       })
     }
 
@@ -1562,6 +1755,7 @@ app.get('/__ent_auth/account', async (req, res) => {
         return res.status(200).json({
           authenticated: true,
           account: payload,
+          sessionMode: session.mode ?? null,
         })
       } catch {
         // Fall through to raw text response
@@ -1580,6 +1774,7 @@ app.get('/__ent_auth/account', async (req, res) => {
     res.status(200).json({
       authenticated: true,
       account: data,
+      sessionMode: session.mode ?? null,
     })
   } catch (error) {
     res.status(500).json({
@@ -1599,6 +1794,28 @@ app.get('/__ent_auth/planning', async (req, res) => {
 
     const targetDate = String(req.query.date ?? new Date().toISOString().slice(0, 10))
     const requestedResourceId = String(req.query.resourceId ?? '')
+
+    if (isDemoSession(session)) {
+      const timetable = buildDemoPlanningPayload({
+        date: targetDate,
+        resourceId: requestedResourceId,
+      })
+
+      setSessionCookie(res, session)
+      return res.status(200).json({
+        authenticated: true,
+        sessionMode: DEMO_SESSION_MODE,
+        events: timetable.events,
+        weekLabel: timetable.weekLabel,
+        dayLabels: timetable.dayLabels,
+        resolvedWeek: timetable.resolvedWeek,
+        outOfRange: timetable.outOfRange,
+        debug: {
+          source: 'demo',
+        },
+      })
+    }
+
     const timetable = await fetchPlanningTimetableFromRpc(session.jar, targetDate, requestedResourceId, {
       cacheScope: getPlanningCacheScope(session),
     })
@@ -1606,6 +1823,7 @@ app.get('/__ent_auth/planning', async (req, res) => {
     setSessionCookie(res, session)
     res.status(200).json({
       authenticated: true,
+      sessionMode: session.mode ?? null,
       events: timetable.events,
       weekLabel: timetable.weekLabel,
       dayLabels: timetable.dayLabels,
@@ -1825,11 +2043,23 @@ app.get('/__ent_auth/grades', async (req, res) => {
       return res.status(200).json({ authenticated: false, grades: null })
     }
 
+    if (isDemoSession(session)) {
+      const gradesData = buildDemoGradesPayload()
+      setCachedGrades(session.id, gradesData)
+      setSessionCookie(res, session)
+      return res.status(200).json({
+        authenticated: true,
+        sessionMode: DEMO_SESSION_MODE,
+        grades: gradesData,
+      })
+    }
+
     const cachedGrades = getCachedGrades(session.id)
     if (cachedGrades) {
       setSessionCookie(res, session)
       return res.status(200).json({
         authenticated: true,
+        sessionMode: session.mode ?? null,
         grades: cachedGrades,
       })
     }
@@ -1850,6 +2080,7 @@ app.get('/__ent_auth/grades', async (req, res) => {
     setSessionCookie(res, session)
     res.status(200).json({
       authenticated: true,
+      sessionMode: session.mode ?? null,
       grades: gradesData,
     })
   } catch (error) {
@@ -1879,6 +2110,24 @@ app.get('/__ent_auth/student-pic', async (req, res) => {
       })
     }
 
+    if (isDemoSession(session)) {
+      setSessionCookie(res, session)
+      if (wantsMeta) {
+        return res.status(200).json({
+          authenticated: true,
+          sessionMode: DEMO_SESSION_MODE,
+          available: false,
+          source: 'demo',
+          previewUrl: null,
+        })
+      }
+
+      return res.status(404).json({
+        available: false,
+        source: 'demo',
+      })
+    }
+
     const picture = await fetchNotes9StudentPic(session.jar)
     const isImage = isNotes9StudentPicImage(picture)
 
@@ -1888,6 +2137,7 @@ app.get('/__ent_auth/student-pic', async (req, res) => {
     if (wantsMeta) {
       return res.status(200).json({
         authenticated: true,
+        sessionMode: session.mode ?? null,
         available: picture.ok && isImage,
         source: 'notes9',
         contentType: picture.contentType,
@@ -1947,6 +2197,24 @@ app.get('/__ent_auth/ade/calendar', async (req, res) => {
       ? req.query.date.trim()
       : null
     const requestedResourceId = String(req.query.resourceId ?? '')
+
+    if (isDemoSession(entSession)) {
+      const calendar = buildDemoCalendarPayload({
+        date: targetDate,
+        resourceId: requestedResourceId,
+      })
+
+      setSessionCookie(res, entSession)
+      return res.status(200).json({
+        authenticated: true,
+        sessionMode: DEMO_SESSION_MODE,
+        calendar,
+        debug: {
+          source: 'demo',
+        },
+      })
+    }
+
     const calendar = await fetchPlanningCalendarMetadataFromRpc(entSession.jar, {
       targetDate,
       resourceId: requestedResourceId,
@@ -1956,6 +2224,7 @@ app.get('/__ent_auth/ade/calendar', async (req, res) => {
     setSessionCookie(res, entSession)
     res.status(200).json({
       authenticated: true,
+      sessionMode: entSession.mode ?? null,
       calendar: {
         source: 'planning.univ-rennes1.fr',
         resourceId: calendar.resourceId,
@@ -1990,6 +2259,20 @@ app.get('/__ent_auth/ade/tree', async (req, res) => {
     if (!entSession) return res.status(200).json({ authenticated: false, tree: null })
 
     const requestedTreeId = String(req.query.etabsVets ?? '')
+
+    if (isDemoSession(entSession)) {
+      const tree = buildDemoAdeTreePayload(requestedTreeId)
+      setSessionCookie(res, entSession)
+      return res.status(200).json({
+        authenticated: true,
+        sessionMode: DEMO_SESSION_MODE,
+        tree,
+        debug: {
+          source: 'demo',
+        },
+      })
+    }
+
     const tree = await fetchPlanningTreeFromRpc(entSession.jar, requestedTreeId, {
       cacheScope: getPlanningCacheScope(entSession),
     })
@@ -1997,6 +2280,7 @@ app.get('/__ent_auth/ade/tree', async (req, res) => {
     setSessionCookie(res, entSession)
     res.status(200).json({
       authenticated: true,
+      sessionMode: entSession.mode ?? null,
       tree: {
         source: 'planning.univ-rennes1.fr',
         root: tree.root,
@@ -2024,6 +2308,18 @@ app.get('/__ent_auth/ade/search', async (req, res) => {
     const query = req.query.q || ''
     if (!query.trim()) return res.status(400).json({ error: 'Query parameter "q" is required.' })
 
+    if (isDemoSession(entSession)) {
+      setSessionCookie(res, entSession)
+      return res.status(200).json({
+        authenticated: true,
+        sessionMode: DEMO_SESSION_MODE,
+        results: searchDemoAdeTree(query),
+        debug: {
+          source: 'demo',
+        },
+      })
+    }
+
     const authResult = await authenticateToAde(entSession.jar, entSession.credentials, {
       cacheScope: getPlanningCacheScope(entSession),
     })
@@ -2032,6 +2328,7 @@ app.get('/__ent_auth/ade/search', async (req, res) => {
     setSessionCookie(res, entSession)
     res.status(200).json({
       authenticated: true,
+      sessionMode: entSession.mode ?? null,
       results: result.data,
       debug: {
         apiStatus: result.status,
@@ -2053,6 +2350,24 @@ app.get('/__ent_auth/ade/timetable', async (req, res) => {
 
     const requestedDate = String(req.query.date ?? new Date().toISOString().slice(0, 10))
     const requestedResourceId = String(req.query.resourceId ?? '')
+
+    if (isDemoSession(entSession)) {
+      const timetable = buildDemoTimetablePayload({
+        date: requestedDate,
+        resourceId: requestedResourceId,
+      })
+
+      setSessionCookie(res, entSession)
+      return res.status(200).json({
+        authenticated: true,
+        sessionMode: DEMO_SESSION_MODE,
+        timetable,
+        debug: {
+          source: 'demo',
+        },
+      })
+    }
+
     const timetable = await fetchPlanningTimetableFromRpc(entSession.jar, requestedDate, requestedResourceId, {
       cacheScope: getPlanningCacheScope(entSession),
     })
@@ -2060,6 +2375,7 @@ app.get('/__ent_auth/ade/timetable', async (req, res) => {
     setSessionCookie(res, entSession)
     res.status(200).json({
       authenticated: true,
+      sessionMode: entSession.mode ?? null,
       timetable: {
         source: 'planning.univ-rennes1.fr',
         date: requestedDate,
@@ -2109,6 +2425,25 @@ app.post('/__ent_auth/ade/upcoming', async (req, res) => {
     const selection = req.body?.selection && typeof req.body.selection === 'object'
       ? req.body.selection
       : null
+
+    if (isDemoSession(entSession)) {
+      const upcoming = buildDemoUpcomingPayload({
+        date: requestedDate,
+        lookaheadDays,
+        selection,
+      })
+
+      setSessionCookie(res, entSession)
+      return res.status(200).json({
+        authenticated: true,
+        sessionMode: DEMO_SESSION_MODE,
+        upcoming,
+        debug: {
+          source: 'demo',
+        },
+      })
+    }
+
     const resourceIds = getAdeSelectionResourceIds(selection)
     const selectionLabels = getAdeSelectionLabels(selection)
     const upcoming = await resolveAdeUpcoming(entSession.jar, entSession.credentials, {
@@ -2122,6 +2457,7 @@ app.post('/__ent_auth/ade/upcoming', async (req, res) => {
     setSessionCookie(res, entSession)
     res.status(200).json({
       authenticated: true,
+      sessionMode: entSession.mode ?? null,
       upcoming: {
         source: upcoming.source,
         date: requestedDate,
@@ -2151,6 +2487,18 @@ app.get('/__ent_auth/ade/alerts', async (req, res) => {
     const entSession = getSessionFromRequest(req)
     if (!entSession) return res.status(200).json({ authenticated: false, alerts: null })
 
+    if (isDemoSession(entSession)) {
+      setSessionCookie(res, entSession)
+      return res.status(200).json({
+        authenticated: true,
+        sessionMode: DEMO_SESSION_MODE,
+        alerts: buildDemoAlertsPayload(),
+        debug: {
+          source: 'demo',
+        },
+      })
+    }
+
     const authResult = await authenticateToAde(entSession.jar, entSession.credentials, {
       cacheScope: getPlanningCacheScope(entSession),
     })
@@ -2161,7 +2509,7 @@ app.get('/__ent_auth/ade/alerts', async (req, res) => {
     const result = await fetchAdeApi(apiPath, authResult.session)
 
     setSessionCookie(res, entSession)
-    res.status(200).json({ authenticated: true, alerts: result.data, debug: { apiStatus: result.status, apiOk: result.ok, ...authResult } })
+    res.status(200).json({ authenticated: true, sessionMode: entSession.mode ?? null, alerts: result.data, debug: { apiStatus: result.status, apiOk: result.ok, ...authResult } })
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
   }
@@ -2179,6 +2527,25 @@ app.post('/__ent_auth/logout', (req, res) => {
   res.status(200).json({
     authenticated: false,
   })
+})
+
+app.all('/__ent_auth/demo/request', express.text({ type: '*/*' }), (req, res) => {
+  const session = getSessionFromRequest(req)
+
+  if (!isDemoSession(session)) {
+    return res.status(403).json({
+      error: 'Demo session required.',
+    })
+  }
+
+  const requestPath = String(req.query.path ?? '').trim()
+  const payload = buildDemoRequestPayload(requestPath, session)
+
+  setSessionCookie(res, session)
+  res.status(payload.status)
+  res.setHeader('Cache-Control', 'no-store')
+  res.setHeader('Content-Type', payload.contentType)
+  return res.send(payload.body)
 })
 
 // ============================================================================
