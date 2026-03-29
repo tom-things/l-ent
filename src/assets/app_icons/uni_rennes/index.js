@@ -27,6 +27,8 @@ import stages from './stages.png'
 import teleformationUnjf from './teleformation-unjf.png'
 import iutlanNotes9 from './iutlan-notes9.png'
 import sesame from './sesame.png'
+import rechercheUniversitaire from './recherche-universitaire.png'
+import loxya from './loxya.png'
 import webconference from './webconference.png'
 
 const APP_ICONS = {
@@ -62,6 +64,8 @@ const APP_ICONS = {
   'sésame': sesame,
   'sesame': sesame,
   'sésame - comptes et données personnelles': sesame,
+  'recherche documentaire': rechercheUniversitaire,
+  'loxya': loxya,
 }
 
 export function getAppIcon(title = '') {

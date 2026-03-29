@@ -1,18 +1,36 @@
-import { randomUUID } from 'node:crypto'
+import { randomUUID, createHmac } from 'node:crypto'
+import { execSync } from 'node:child_process'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { defineConfig } from 'vite'
+import {
+  createAdeApiClient,
+  getAdeSelectionLabels,
+  getAdeSelectionResourceIds,
+} from './adeApi.js'
+import { createAdeUpcomingResolver } from './adeUpcomingResolver.js'
+import { createPlanningRpcClient } from './planningRpc.js'
 
 const ENT_ORIGIN = 'https://services-numeriques.univ-rennes.fr'
 const CAS_ORIGIN = 'https://sso-cas.univ-rennes.fr'
-const PLANNING_ORIGIN = 'https://planning.univ-rennes1.fr'
-const PLANNING_SERVICE_URL = `${PLANNING_ORIGIN}/direct/myplanning.jsp`
 const ADE_ORIGIN = 'https://campus-app.univ-rennes.fr'
-const ADE_API_BASE = `${ADE_ORIGIN}/api`
+const MOODLE_ORIGIN = 'https://foad.univ-rennes.fr'
+const MOODLE_SHIBBOLETH_LOGIN_URL = `${MOODLE_ORIGIN}/auth/shibboleth/index.php`
+const NOTES9_ORIGIN = 'https://notes9.iutlan.univ-rennes1.fr'
+const RENNES_WAYF_ENTITY_ID = 'urn:mace:cru.fr:federation:univ-rennes1.fr'
 const DEFAULT_REFERER = `${ENT_ORIGIN}/f/services/normal/render.uP`
 const LOCAL_SESSION_COOKIE = 'ent_front_session'
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000
+const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
+const LOGIN_RATE_LIMIT_BLOCK_MS = 15 * 60 * 1000
+const LOGIN_RATE_LIMIT_MAX_ATTEMPTS_PER_IP = 10
+const LOGIN_RATE_LIMIT_MAX_ATTEMPTS_PER_USERNAME = 5
+const MAX_PERSISTED_COOKIE_VALUE_LENGTH = 1024
+const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-only-insecure-secret'
+const runtimeSessions = new Map()
+const loginRateLimitByIp = new Map()
+const loginRateLimitByUsername = new Map()
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -211,6 +229,22 @@ class CookieJar {
       .map((cookie) => cookie.name)
       .sort((left, right) => left.localeCompare(right))
   }
+
+  hasCookie(hostname, cookieName) {
+    return this.getCookieNamesForHost(hostname).includes(String(cookieName))
+  }
+
+  serialize() {
+    return Array.from(this.store.entries())
+  }
+
+  static fromSerialized(entries) {
+    const jar = new CookieJar()
+    for (const [key, cookie] of entries ?? []) {
+      jar.store.set(key, cookie)
+    }
+    return jar
+  }
 }
 
 function resolveUrl(location, currentUrl) {
@@ -305,7 +339,7 @@ function extractHiddenInputValue(html, inputName) {
 
 function extractFormAction(html, pageUrl) {
   const match = html.match(/<form[^>]+action=["']([^"']+)["']/i)
-  const action = match?.[1] ?? pageUrl
+  const action = match ? decodeHtmlEntities(match[1]) : pageUrl
   return resolveUrl(action, pageUrl)
 }
 
@@ -437,35 +471,740 @@ function buildEntProxyTargetUrl(requestUrl) {
   return new URL(rewrittenPath, ENT_ORIGIN).toString()
 }
 
-function getSessionFromRequest(req, sessions) {
-  const cookies = parseCookieHeader(req.headers.cookie)
-  const sessionId = cookies[LOCAL_SESSION_COOKIE]
+function getSessionLaunchCapabilities(session) {
+  const canUseServerLaunch = Boolean(session?.jar?.hasCookie('sso-cas.univ-rennes.fr', 'TGC'))
 
-  if (!sessionId) {
-    return null
+  return {
+    canUseServerLaunch,
+    degraded: !canUseServerLaunch,
+    degradedReason: canUseServerLaunch ? null : 'missing-cas-tgc',
   }
-
-  const session = sessions.get(sessionId)
-  if (!session) {
-    return null
-  }
-
-  if (Date.now() - session.updatedAt > SESSION_TTL_MS) {
-    sessions.delete(sessionId)
-    return null
-  }
-
-  session.updatedAt = Date.now()
-  return session
 }
 
-function setLocalSessionCookie(res, sessionId) {
+function encodeSession(data) {
+  const payload = Buffer.from(JSON.stringify(data)).toString('base64url')
+  const sig = createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url')
+  return `${payload}.${sig}`
+}
+
+function decodeSession(cookieValue) {
+  if (!cookieValue) return null
+  const lastDot = cookieValue.lastIndexOf('.')
+  if (lastDot === -1) return null
+  const payload = cookieValue.slice(0, lastDot)
+  const sig = cookieValue.slice(lastDot + 1)
+  const expected = createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url')
+  if (sig !== expected) return null
+  try {
+    return JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8'))
+  } catch {
+    return null
+  }
+}
+
+function isPersistableSessionCookie([, cookie]) {
+  if (!cookie || typeof cookie.value !== 'string') {
+    return false
+  }
+
+  if (cookie.value.length > MAX_PERSISTED_COOKIE_VALUE_LENGTH) {
+    return false
+  }
+
+  if (cookie.domain === 'sso-cas.univ-rennes.fr' && cookie.name === 'TGC') {
+    return false
+  }
+
+  return true
+}
+
+function buildPersistedSessionJar(session) {
+  if (!(session?.jar instanceof CookieJar)) {
+    return []
+  }
+
+  return session.jar.serialize().filter(isPersistableSessionCookie)
+}
+
+function pruneRuntimeSessions() {
+  const now = Date.now()
+
+  for (const [sessionId, session] of runtimeSessions.entries()) {
+    if (!session?.createdAt || now - session.createdAt > SESSION_TTL_MS) {
+      runtimeSessions.delete(sessionId)
+    }
+  }
+}
+
+function getSessionFromRequest(req) {
+  pruneRuntimeSessions()
+
+  const cookies = parseCookieHeader(req.headers.cookie)
+  const data = decodeSession(cookies[LOCAL_SESSION_COOKIE])
+  if (!data) {
+    return null
+  }
+
+  const runtimeSession = runtimeSessions.get(data.id)
+  if (runtimeSession) {
+    runtimeSession.sessionSource = 'runtime'
+    return runtimeSession
+  }
+
+  return {
+    id: data.id,
+    user: data.user,
+    jar: CookieJar.fromSerialized(data.jar),
+    createdAt: data.createdAt,
+    sessionSource: 'cookie',
+  }
+}
+
+function getHostnameFromUrl(value) {
+  try {
+    return new URL(value).hostname
+  } catch {
+    return ''
+  }
+}
+
+function escapeHtmlAttribute(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/'/g, '&#39;')
+}
+
+function isMoodleLaunchTarget(targetUrl) {
+  return getHostnameFromUrl(targetUrl) === 'foad.univ-rennes.fr'
+}
+
+function isMoodleShibbolethPostTarget(targetUrl) {
+  return getHostnameFromUrl(targetUrl) === 'foad.univ-rennes.fr'
+    && /\/Shibboleth\.sso\//i.test(new URL(targetUrl).pathname)
+}
+
+function buildMoodleWayfRequest(page, acceptHeader) {
+  const actionUrl = extractFormAction(page.html, page.url)
+  return {
+    actionUrl,
+    headers: {
+      Accept: acceptHeader,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Origin: new URL(actionUrl).origin,
+      Referer: page.url,
+    },
+    body: new URLSearchParams({
+      user_idp: RENNES_WAYF_ENTITY_ID,
+      Select: 'Sélection',
+    }).toString(),
+  }
+}
+
+function buildCasLoginRequest(html, pageUrl, credentials, acceptHeader) {
+  const username = String(credentials?.username ?? '').trim()
+  const password = String(credentials?.password ?? '')
+  const execution = extractHiddenInputValue(html, 'execution')
+
+  if (!execution) {
+    return null
+  }
+
+  if (!username || !password) {
+    throw new Error('Missing runtime credentials for Moodle launch.')
+  }
+
+  const actionUrl = extractFormAction(html, pageUrl)
+  return {
+    actionUrl,
+    headers: {
+      Accept: acceptHeader,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Origin: new URL(actionUrl).origin,
+      Referer: pageUrl,
+    },
+    body: new URLSearchParams({
+      username,
+      password,
+      execution,
+      _eventId: extractHiddenInputValue(html, '_eventId') || 'submit',
+      geolocation: extractHiddenInputValue(html, 'geolocation'),
+    }).toString(),
+  }
+}
+
+function parseFormFields(formBody) {
+  return Object.fromEntries(new URLSearchParams(formBody))
+}
+
+async function prepareMoodleLaunchRelay(session) {
+  const acceptHeader = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+  const launchCapabilities = getSessionLaunchCapabilities(session)
+  const chain = []
+  let currentUrl = MOODLE_SHIBBOLETH_LOGIN_URL
+  let currentMethod = 'GET'
+  let currentBody = undefined
+  let currentHeaders = { Accept: acceptHeader }
+
+  for (let attempt = 0; attempt < 15; attempt += 1) {
+    const response = await fetchWithJar(currentUrl, session.jar, {
+      method: currentMethod,
+      body: currentBody,
+      headers: currentHeaders,
+      redirect: 'manual',
+    })
+
+    const location = response.headers.get('location')
+    chain.push({
+      status: response.status,
+      url: currentUrl,
+      location,
+    })
+
+    if (isRedirectStatus(response.status) && location) {
+      currentUrl = resolveUrl(location, currentUrl)
+
+      if (response.status === 303 || ((response.status === 301 || response.status === 302) && currentMethod === 'POST')) {
+        currentMethod = 'GET'
+        currentBody = undefined
+        currentHeaders = { Accept: acceptHeader }
+      }
+
+      continue
+    }
+
+    const html = await response.text()
+    const htmlRedirect = extractHtmlRedirect(html, currentUrl)
+    if (htmlRedirect) {
+      currentUrl = htmlRedirect
+      currentMethod = 'GET'
+      currentBody = undefined
+      currentHeaders = { Accept: acceptHeader }
+      continue
+    }
+
+    const autoSubmitForm = extractAutoSubmitForm(html, currentUrl)
+    if (autoSubmitForm) {
+      if (isMoodleShibbolethPostTarget(autoSubmitForm.action)) {
+        return {
+          finalUrl: autoSubmitForm.action,
+          actionUrl: autoSubmitForm.action,
+          fields: parseFormFields(autoSubmitForm.body),
+          chain,
+          useServerLaunch: true,
+          reason: 'server-saml-relay',
+          ...launchCapabilities,
+        }
+      }
+
+      currentUrl = autoSubmitForm.action
+      currentMethod = 'POST'
+      currentBody = autoSubmitForm.body
+      currentHeaders = {
+        Accept: acceptHeader,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Origin: new URL(autoSubmitForm.action).origin,
+        Referer: currentUrl,
+      }
+      continue
+    }
+
+    if (/name=["']user_idp["']/i.test(html)) {
+      const wayfRequest = buildMoodleWayfRequest({
+        html,
+        url: currentUrl,
+      }, acceptHeader)
+      currentUrl = wayfRequest.actionUrl
+      currentMethod = 'POST'
+      currentBody = wayfRequest.body
+      currentHeaders = wayfRequest.headers
+      continue
+    }
+
+    const casLoginRequest = buildCasLoginRequest(html, currentUrl, session.credentials, acceptHeader)
+    if (casLoginRequest && getHostnameFromUrl(casLoginRequest.actionUrl).includes('sso-cas')) {
+      currentUrl = casLoginRequest.actionUrl
+      currentMethod = 'POST'
+      currentBody = casLoginRequest.body
+      currentHeaders = casLoginRequest.headers
+      continue
+    }
+
+    throw new Error('Unable to prepare the Moodle SSO handoff.')
+  }
+
+  throw new Error('Too many steps while preparing Moodle launch.')
+}
+
+async function prepareMoodleBrowserBootstrap(credentials) {
+  const username = String(credentials?.username ?? '').trim()
+  const password = String(credentials?.password ?? '')
+
+  if (!username || !password) {
+    throw new Error('Missing runtime credentials for Moodle launch.')
+  }
+
+  const browserJar = new CookieJar()
+  const acceptHeader = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+
+  const wayfPageResult = await followRedirectChain(MOODLE_SHIBBOLETH_LOGIN_URL, browserJar, {
+    headers: { Accept: acceptHeader },
+  })
+  const wayfPageHtml = await wayfPageResult.response.text()
+  const wayfActionUrl = extractFormAction(wayfPageHtml, wayfPageResult.finalUrl)
+  const wayfBody = new URLSearchParams({
+    user_idp: RENNES_WAYF_ENTITY_ID,
+    Select: 'Sélection',
+  }).toString()
+
+  const wayfSubmitResponse = await fetchWithJar(wayfActionUrl, browserJar, {
+    method: 'POST',
+    headers: {
+      Accept: acceptHeader,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Origin: new URL(wayfActionUrl).origin,
+      Referer: wayfPageResult.finalUrl,
+    },
+    body: wayfBody,
+    redirect: 'manual',
+  })
+
+  if (!isRedirectStatus(wayfSubmitResponse.status)) {
+    throw new Error('Unable to prepare the Moodle identity-provider handoff.')
+  }
+
+  const wayfLocation = wayfSubmitResponse.headers.get('location')
+  if (!wayfLocation) {
+    throw new Error('Moodle WAYF handoff did not return a redirect target.')
+  }
+
+  const browserWarmupUrl = resolveUrl(wayfLocation, wayfActionUrl)
+  const casLoginResult = await followRedirectChain(browserWarmupUrl, browserJar, {
+    headers: { Accept: acceptHeader },
+  })
+  const casLoginHtml = await casLoginResult.response.text()
+  const execution = extractHiddenInputValue(casLoginHtml, 'execution')
+
+  if (!execution) {
+    throw new Error('Unable to prepare the Rennes CAS login form for Moodle.')
+  }
+
+  return {
+    warmupUrl: browserWarmupUrl,
+    actionUrl: extractFormAction(casLoginHtml, casLoginResult.finalUrl),
+    fields: {
+      username,
+      password,
+      execution,
+      _eventId: extractHiddenInputValue(casLoginHtml, '_eventId') || 'submit',
+      geolocation: extractHiddenInputValue(casLoginHtml, 'geolocation'),
+    },
+  }
+}
+
+function buildAutoSubmitPage({ title, heading, body, actionUrl, fields, warmupUrl = '' }) {
+  const hiddenFields = Object.entries(fields).map(([name, value]) => (
+    `<input type="hidden" name="${escapeHtmlAttribute(name)}" value="${escapeHtmlAttribute(value)}" />`
+  )).join('')
+  const serializedWarmupUrl = JSON.stringify(String(warmupUrl ?? ''))
+  const warmupFrame = warmupUrl
+    ? '<iframe id="warmup" title="" aria-hidden="true" tabindex="-1" style="display:none"></iframe>'
+    : ''
+
+  return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-store" />
+  <title>${escapeHtmlAttribute(title)}</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #f7f8fb; color: #18212f; }
+    main { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+    section { width: min(420px, 100%); background: #fff; border-radius: 18px; padding: 28px; box-shadow: 0 18px 50px rgba(24, 33, 47, 0.12); }
+    h1 { margin: 0 0 12px; font-size: 1.15rem; }
+    p { margin: 0; line-height: 1.55; color: #48566a; }
+    button { margin-top: 18px; border: 0; border-radius: 999px; padding: 12px 18px; background: #0d6efd; color: #fff; font: inherit; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <main>
+    <section>
+      <h1>${escapeHtmlAttribute(heading)}</h1>
+      <p>${escapeHtmlAttribute(body)}</p>
+      <form id="handoff" method="post" action="${escapeHtmlAttribute(actionUrl)}">
+        ${hiddenFields}
+        <noscript><button type="submit">Continuer</button></noscript>
+      </form>
+      ${warmupFrame}
+    </section>
+  </main>
+  <script>
+    window.addEventListener('load', function () {
+      const form = document.getElementById('handoff')
+      if (!form) return
+
+      const warmupUrl = ${serializedWarmupUrl}
+      if (!warmupUrl) {
+        form.submit()
+        return
+      }
+
+      const iframe = document.getElementById('warmup')
+      let submitted = false
+      const submitForm = function () {
+        if (submitted) return
+        submitted = true
+        form.submit()
+      }
+
+      if (!iframe) {
+        submitForm()
+        return
+      }
+
+      iframe.addEventListener('load', function () {
+        window.setTimeout(submitForm, 120)
+      }, { once: true })
+
+      iframe.src = warmupUrl
+      window.setTimeout(submitForm, 4000)
+    })
+  </script>
+</body>
+</html>`
+}
+
+async function previewServerLaunch(targetUrl, session) {
+  if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) {
+    return {
+      finalUrl: String(targetUrl ?? ''),
+      chain: [],
+      useServerLaunch: false,
+      reason: 'invalid-target-url',
+    }
+  }
+
+  if (!session) {
+    return {
+      finalUrl: targetUrl,
+      chain: [],
+      useServerLaunch: false,
+      reason: 'missing-session',
+    }
+  }
+
+  const launchCapabilities = getSessionLaunchCapabilities(session)
+  if (isMoodleLaunchTarget(targetUrl)) {
+    if (launchCapabilities.canUseServerLaunch || (session?.credentials?.username && session?.credentials?.password)) {
+      return {
+        finalUrl: targetUrl,
+        chain: [],
+        useServerLaunch: true,
+        reason: 'server-saml-relay',
+        ...launchCapabilities,
+      }
+    }
+
+    return {
+      finalUrl: targetUrl,
+      chain: [],
+      useServerLaunch: false,
+      reason: 'missing-launch-credentials',
+      ...launchCapabilities,
+    }
+  }
+
+  if (!launchCapabilities.canUseServerLaunch) {
+    return {
+      finalUrl: targetUrl,
+      chain: [],
+      useServerLaunch: false,
+      reason: 'missing-cas-tgc',
+      ...launchCapabilities,
+    }
+  }
+
+  const chain = []
+  let currentUrl = targetUrl
+  const targetHost = getHostnameFromUrl(targetUrl)
+
+  try {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const response = await fetchWithJar(currentUrl, session.jar, {
+        redirect: 'manual',
+        headers: {
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+      })
+
+      const location = response.headers.get('location')
+      chain.push({ status: response.status, url: currentUrl, location })
+
+      const currentHost = getHostnameFromUrl(currentUrl)
+      if (isRedirectStatus(response.status) && location) {
+        const nextUrl = resolveUrl(location, currentUrl)
+        const nextHost = getHostnameFromUrl(nextUrl)
+
+        if (!currentHost.includes('sso-cas') && nextHost.includes('sso-cas')) {
+          return {
+            finalUrl: nextUrl,
+            chain,
+            useServerLaunch: true,
+            reason: 'cas-login',
+            ...launchCapabilities,
+          }
+        }
+
+        if (currentHost.includes('sso-cas') && !nextHost.includes('sso-cas')) {
+          if (nextHost === targetHost) {
+            return {
+              finalUrl: nextUrl,
+              chain,
+              useServerLaunch: true,
+              reason: 'cas-ticket',
+              ...launchCapabilities,
+            }
+          }
+
+          return {
+            finalUrl: targetUrl,
+            chain,
+            useServerLaunch: false,
+            saml: true,
+            reason: 'saml-browser-handoff',
+            ...launchCapabilities,
+          }
+        }
+
+        currentUrl = nextUrl
+        continue
+      }
+
+      const html = await response.text()
+      const htmlRedirect = extractHtmlRedirect(html, currentUrl)
+      if (htmlRedirect) {
+        const nextHost = getHostnameFromUrl(htmlRedirect)
+
+        if (!currentHost.includes('sso-cas') && nextHost.includes('sso-cas')) {
+          return {
+            finalUrl: htmlRedirect,
+            chain,
+            useServerLaunch: true,
+            reason: 'cas-html-redirect',
+            ...launchCapabilities,
+          }
+        }
+
+        currentUrl = htmlRedirect
+        continue
+      }
+
+      const autoSubmitForm = extractAutoSubmitForm(html, currentUrl)
+      if (autoSubmitForm) {
+        const actionHost = getHostnameFromUrl(autoSubmitForm.action)
+
+        if (actionHost.includes('sso-cas')) {
+          return {
+            finalUrl: autoSubmitForm.action,
+            chain,
+            useServerLaunch: true,
+            reason: 'cas-form',
+            ...launchCapabilities,
+          }
+        }
+
+        return {
+          finalUrl: currentUrl,
+          chain,
+          useServerLaunch: false,
+          reason: 'browser-form-handoff',
+          ...launchCapabilities,
+        }
+      }
+
+      return {
+        finalUrl: currentUrl,
+        chain,
+        useServerLaunch: false,
+        reason: 'direct-browser-launch',
+        ...launchCapabilities,
+      }
+    }
+
+    return {
+      finalUrl: currentUrl,
+      chain,
+      useServerLaunch: false,
+      reason: 'too-many-redirects',
+      error: 'too-many-redirects',
+      ...launchCapabilities,
+    }
+  } catch (error) {
+    return {
+      finalUrl: targetUrl,
+      chain,
+      useServerLaunch: false,
+      reason: 'preview-error',
+      error: error instanceof Error ? error.message : String(error),
+      ...launchCapabilities,
+    }
+  }
+}
+
+function getPlanningCacheScope(session) {
+  if (!session?.id) {
+    return null
+  }
+
+  return `session:${session.id}`
+}
+
+function normalizeLoginIdentifier(username) {
+  return String(username ?? '').trim().toLowerCase()
+}
+
+function getLoginRequesterIp(req) {
+  const forwardedFor = String(req.headers['x-forwarded-for'] ?? '').split(',')[0]?.trim()
+  return forwardedFor || String(req.socket?.remoteAddress || 'unknown')
+}
+
+function pruneLoginRateLimitStore(store) {
+  const now = Date.now()
+
+  for (const [key, entry] of store.entries()) {
+    if (!entry) {
+      store.delete(key)
+      continue
+    }
+
+    if (entry.blockedUntil && entry.blockedUntil > now) {
+      continue
+    }
+
+    if (!entry.firstFailureAt || now - entry.firstFailureAt > LOGIN_RATE_LIMIT_WINDOW_MS) {
+      store.delete(key)
+    }
+  }
+}
+
+function getRateLimitStatus(store, key) {
+  if (!key) {
+    return null
+  }
+
+  pruneLoginRateLimitStore(store)
+  const entry = store.get(key)
+
+  if (!entry?.blockedUntil) {
+    return null
+  }
+
+  const retryAfterMs = entry.blockedUntil - Date.now()
+  if (retryAfterMs <= 0) {
+    store.delete(key)
+    return null
+  }
+
+  return {
+    retryAfterMs,
+    retryAfterSeconds: Math.max(1, Math.ceil(retryAfterMs / 1000)),
+  }
+}
+
+function recordRateLimitFailure(store, key, maxAttempts) {
+  if (!key) {
+    return null
+  }
+
+  pruneLoginRateLimitStore(store)
+
+  const now = Date.now()
+  const currentEntry = store.get(key)
+  const resetWindow = !currentEntry?.firstFailureAt || now - currentEntry.firstFailureAt > LOGIN_RATE_LIMIT_WINDOW_MS
+  const nextEntry = resetWindow
+    ? { count: 1, firstFailureAt: now, blockedUntil: 0 }
+    : {
+        count: Number(currentEntry.count ?? 0) + 1,
+        firstFailureAt: currentEntry.firstFailureAt,
+        blockedUntil: currentEntry.blockedUntil ?? 0,
+      }
+
+  if (nextEntry.count >= maxAttempts) {
+    nextEntry.blockedUntil = now + LOGIN_RATE_LIMIT_BLOCK_MS
+  }
+
+  store.set(key, nextEntry)
+  return getRateLimitStatus(store, key)
+}
+
+function clearRateLimitEntry(store, key) {
+  if (!key) {
+    return
+  }
+
+  store.delete(key)
+}
+
+function getActiveLoginRateLimit(req, username) {
+  const ipKey = getLoginRequesterIp(req)
+  const usernameKey = normalizeLoginIdentifier(username)
+  const statuses = [
+    getRateLimitStatus(loginRateLimitByIp, ipKey),
+    getRateLimitStatus(loginRateLimitByUsername, usernameKey),
+  ].filter(Boolean)
+
+  if (statuses.length === 0) {
+    return null
+  }
+
+  return statuses.reduce((currentMax, status) => (
+    !currentMax || status.retryAfterMs > currentMax.retryAfterMs ? status : currentMax
+  ), null)
+}
+
+function recordLoginFailure(req, username) {
+  const ipKey = getLoginRequesterIp(req)
+  const usernameKey = normalizeLoginIdentifier(username)
+  const statuses = [
+    recordRateLimitFailure(loginRateLimitByIp, ipKey, LOGIN_RATE_LIMIT_MAX_ATTEMPTS_PER_IP),
+    recordRateLimitFailure(loginRateLimitByUsername, usernameKey, LOGIN_RATE_LIMIT_MAX_ATTEMPTS_PER_USERNAME),
+  ].filter(Boolean)
+
+  if (statuses.length === 0) {
+    return null
+  }
+
+  return statuses.reduce((currentMax, status) => (
+    !currentMax || status.retryAfterMs > currentMax.retryAfterMs ? status : currentMax
+  ), null)
+}
+
+function clearLoginRateLimit(req, username) {
+  clearRateLimitEntry(loginRateLimitByIp, getLoginRequesterIp(req))
+  clearRateLimitEntry(loginRateLimitByUsername, normalizeLoginIdentifier(username))
+}
+
+function setSessionCookie(res, session) {
+  pruneRuntimeSessions()
+  runtimeSessions.set(session.id, session)
+
+  const data = {
+    id: session.id,
+    user: session.user,
+    jar: buildPersistedSessionJar(session),
+    createdAt: session.createdAt,
+  }
+
   res.setHeader(
     'Set-Cookie',
-    serializeCookie(LOCAL_SESSION_COOKIE, sessionId, {
+    serializeCookie(LOCAL_SESSION_COOKIE, encodeSession(data), {
       path: '/',
       httpOnly: true,
       sameSite: 'Lax',
+      secure: !!process.env.SESSION_SECRET,
       maxAge: SESSION_TTL_MS / 1000,
     }),
   )
@@ -483,7 +1222,7 @@ function clearLocalSessionCookie(res) {
   )
 }
 
-function parseIcalEvents(icalText) {
+function _parseIcalEvents(icalText) {
   const events = []
   const blocks = icalText.split('BEGIN:VEVENT')
 
@@ -603,102 +1342,82 @@ function unescapeIcal(value) {
     .trim()
 }
 
-async function establishPlanningSession(jar) {
-  // 1. Get CAS service ticket and establish authenticated JSESSIONID
-  const casLoginUrl = `${CAS_ORIGIN}/login?service=${encodeURIComponent(PLANNING_SERVICE_URL)}`
-  const casResult = await followRedirectChain(casLoginUrl, jar, {
+const {
+  fetchPlanningCalendarMetadataFromRpc,
+  fetchPlanningTimetableFromRpc,
+  fetchPlanningTreeFromRpc,
+} = createPlanningRpcClient({
+  casOrigin: CAS_ORIGIN,
+  fetchWithJar,
+  followRedirectChain,
+})
+
+const {
+  authenticateToAde,
+  fetchAdeApi,
+  fetchAdeUpcomingFromApi,
+} = createAdeApiClient({
+  adeOrigin: ADE_ORIGIN,
+  casOrigin: CAS_ORIGIN,
+  followRedirectChain,
+})
+
+const {
+  resolveAdeUpcoming,
+} = createAdeUpcomingResolver({
+  fetchAdeUpcomingFromApi,
+  fetchPlanningTreeFromRpc,
+  fetchPlanningTimetableFromRpc,
+})
+
+async function ensureNotes9Session(jar) {
+  const doAuthUrl = `${NOTES9_ORIGIN}/services/doAuth.php?href=${encodeURIComponent(`${NOTES9_ORIGIN}/`)}`
+  await followRedirectChain(doAuthUrl, jar, {
     headers: { Accept: 'text/html,application/xhtml+xml,*/*' },
   })
-  await casResult.response.text()
+}
 
-  // 2. Get the GWT strong name (separate request, doesn't need ticket)
-  const nocacheUrl = `${PLANNING_ORIGIN}/direct/gwtdirectplanning/gwtdirectplanning.nocache.js`
-  const nocacheResponse = await fetchWithJar(nocacheUrl, jar, {
-    headers: { Accept: '*/*' },
+function isNotes9StudentPicImage(picture) {
+  return picture.ok && /^image\//i.test(picture.contentType) && picture.size > 0
+}
+
+async function requestNotes9StudentPic(jar) {
+  const pictureResponse = await fetchWithJar(`${NOTES9_ORIGIN}/services/data.php?q=getStudentPic`, jar, {
+    headers: {
+      Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      Referer: `${NOTES9_ORIGIN}/`,
+    },
     redirect: 'follow',
   })
-  const nocacheJs = await nocacheResponse.text()
 
-  let strongName = ''
-  const match = nocacheJs.match(/='([A-F0-9]{32})'/i)
-    || nocacheJs.match(/'([A-F0-9]{32})'/i)
-  if (match) {
-    strongName = match[1]
+  const contentType = pictureResponse.headers.get('content-type') ?? 'application/octet-stream'
+  const buffer = Buffer.from(await pictureResponse.arrayBuffer())
+
+  return {
+    ok: pictureResponse.ok,
+    status: pictureResponse.status,
+    contentType,
+    size: buffer.length,
+    buffer,
   }
-
-  const moduleBase = `${PLANNING_ORIGIN}/direct/gwtdirectplanning/`
-  const rpcHeaders = {
-    'Content-Type': 'text/x-gwt-rpc; charset=utf-8',
-    'X-GWT-Module-Base': moduleBase,
-    ...(strongName ? { 'X-GWT-Permutation': strongName } : {}),
-  }
-
-  return { moduleBase, strongName, rpcHeaders, ticket }
 }
 
-// Headers matching the campus-app web client exactly (from HAR capture).
-const ADE_APP_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
-  'Content-Type': 'application/json; charset=utf-8',
-  'Accept': 'application/json',
-  'Origin': 'https://campus-app.univ-rennes.fr',
-  'Referer': 'https://campus-app.univ-rennes.fr/web/',
-  'x-app-version': '2.4.5',
-  'x-lang': 'fr',
-  'x-nav-lang': 'fr-FR',
-  'deviceid': 'null',
-  'devicemodel': '',
-  'devicemanufacturer': 'Google Inc.',
-  'deviceos': 'Web',
-  'deviceversion': '20030107',
-}
+async function fetchNotes9StudentPic(jar) {
+  await ensureNotes9Session(jar)
 
-async function authenticateToAde(jar, credentials) {
-  if (!credentials) {
-    return { session: null, error: 'No credentials available for ADE login' }
+  let picture = await requestNotes9StudentPic(jar)
+
+  if (isNotes9StudentPicImage(picture)) {
+    return picture
   }
 
-  // The campus-app API uses direct username/password login (not CAS tickets).
-  const reqBody = JSON.stringify({ username: credentials.username, password: credentials.password, etab: 'UR' })
-  const reqHeaders = { ...ADE_APP_HEADERS, 'session': 'null' }
-  console.log('[ADE] POST /api/auth/login', { headers: reqHeaders, bodyLength: reqBody.length, bodyPreview: reqBody.replace(/"password":"[^"]*"/, '"password":"***"') })
+  await ensureNotes9Session(jar)
+  picture = await requestNotes9StudentPic(jar)
 
-  const loginResponse = await fetch(`${ADE_API_BASE}/auth/login`, {
-    method: 'POST',
-    headers: reqHeaders,
-    body: reqBody,
-  })
-  const loginText = await loginResponse.text()
-  console.log('[ADE] Response:', loginResponse.status, loginText.substring(0, 500))
-  console.log('[ADE] Response headers:', Object.fromEntries(loginResponse.headers.entries()))
-
-  let loginData = null
-  try { loginData = JSON.parse(loginText) } catch { /* not JSON */ }
-
-  const session = loginData?.sessionId ?? loginData?.session ?? loginData?.token ?? null
-
-  return { session, loginStatus: loginResponse.status, loginData }
-}
-
-async function fetchAdeApi(path, session) {
-  const url = `${ADE_API_BASE}${path}`
-  const response = await fetch(url, {
-    headers: {
-      ...ADE_APP_HEADERS,
-      'session': session || 'null',
-    },
-  })
-
-  const text = await response.text()
-  let data
-  try { data = JSON.parse(text) } catch { data = text }
-
-  return { ok: response.ok, status: response.status, data, text }
+  return picture
 }
 
 function createEntDevAuthPlugin() {
-  const sessions = new Map()
-
   const attachMiddlewares = (middlewares) => {
     middlewares.use('/__ent_auth/session', async (req, res, next) => {
       if (req.method !== 'GET') {
@@ -707,12 +1426,17 @@ function createEntDevAuthPlugin() {
       }
 
       try {
-        const session = getSessionFromRequest(req, sessions)
+        res.setHeader('Cache-Control', 'no-store')
+        const session = getSessionFromRequest(req)
 
         if (!session) {
           sendJson(res, 200, {
             authenticated: false,
             user: null,
+            sessionSource: null,
+            degraded: false,
+            degradedReason: null,
+            canUseServerLaunch: false,
           })
           return
         }
@@ -720,21 +1444,29 @@ function createEntDevAuthPlugin() {
         const layout = await fetchEntLayout(session.jar)
 
         if (!layout.ok || !layout.data || String(layout.data.authenticated) !== 'true') {
-          sessions.delete(session.id)
           clearLocalSessionCookie(res)
           sendJson(res, 200, {
             authenticated: false,
             user: null,
+            sessionSource: null,
+            degraded: false,
+            degradedReason: null,
+            canUseServerLaunch: false,
           })
           return
         }
 
         session.user = layout.data.user
+        setSessionCookie(res, session)
+        const launchCapabilities = getSessionLaunchCapabilities(session)
 
         sendJson(res, 200, {
           authenticated: true,
           user: layout.data.user,
+          sessionSource: session.sessionSource ?? null,
           cookieNames: session.jar.getCookieNamesForHost('services-numeriques.univ-rennes.fr'),
+          casCookieNames: session.jar.getCookieNamesForHost('sso-cas.univ-rennes.fr'),
+          ...launchCapabilities,
         })
       } catch (error) {
         sendJson(res, 500, {
@@ -749,9 +1481,11 @@ function createEntDevAuthPlugin() {
         return
       }
 
+      let username = ''
+
       try {
         const body = await readJsonBody(req)
-        const username = String(body.username ?? '').trim()
+        username = String(body.username ?? '').trim()
         const password = String(body.password ?? '')
 
         if (!username || !password) {
@@ -761,23 +1495,50 @@ function createEntDevAuthPlugin() {
           return
         }
 
-        const result = await performEntLogin({ username, password })
-        const sessionId = randomUUID()
+        const activeRateLimit = getActiveLoginRateLimit(req, username)
+        if (activeRateLimit) {
+          res.setHeader('Retry-After', String(activeRateLimit.retryAfterSeconds))
+          sendJson(res, 429, {
+            error: 'Too many login attempts. Please try again later.',
+          })
+          return
+        }
 
-        sessions.set(sessionId, {
-          id: sessionId,
+        const result = await performEntLogin({ username, password })
+        clearLoginRateLimit(req, username)
+        const session = {
+          id: randomUUID(),
           user: result.layout.user,
-          updatedAt: Date.now(),
           jar: result.jar,
           credentials: { username, password },
-        })
+          createdAt: Date.now(),
+        }
 
-        setLocalSessionCookie(res, sessionId)
+        // Warm the ADE session cache while the credentials are only available in
+        // this request, without storing them on the app session.
+        try {
+          await authenticateToAde(result.jar, { username, password }, {
+            cacheScope: getPlanningCacheScope(session),
+          })
+        } catch (adeError) {
+          console.warn('ADE session bootstrap failed during login:', adeError)
+        }
+
+        setSessionCookie(res, session)
         sendJson(res, 200, {
           authenticated: true,
           user: result.layout.user,
         })
       } catch (error) {
+        const rateLimit = recordLoginFailure(req, username)
+        if (rateLimit) {
+          res.setHeader('Retry-After', String(rateLimit.retryAfterSeconds))
+          sendJson(res, 429, {
+            error: 'Too many login attempts. Please try again later.',
+          })
+          return
+        }
+
         sendJson(res, 401, {
           error: error instanceof Error ? error.message : String(error),
         })
@@ -791,7 +1552,7 @@ function createEntDevAuthPlugin() {
       }
 
       try {
-        const session = getSessionFromRequest(req, sessions)
+        const session = getSessionFromRequest(req)
 
         if (!session) {
           sendJson(res, 200, {
@@ -852,56 +1613,42 @@ function createEntDevAuthPlugin() {
       }
 
       try {
-        const session = getSessionFromRequest(req, sessions)
+        const session = getSessionFromRequest(req)
 
         if (!session) {
           sendJson(res, 200, { authenticated: false, events: null })
           return
         }
 
-        const CAMPUS_API = 'https://campus-app.univ-rennes.fr/api'
-        const campusHeaders = {
-          deviceid: 'null',
-          devicemanufacturer: 'Google Inc.',
-          devicemodel: '',
-          deviceos: 'Web',
-          deviceversion: '20030107',
-          'x-app-version': '2.4.5',
-          'x-lang': 'fr',
-          'x-nav-lang': 'fr-FR',
-        }
-
-        // Helper: get a fresh CAS ticket for a given service URL (without consuming it)
-        const getTicket = async (serviceUrl) => {
-          const casUrl = `${CAS_ORIGIN}/login?service=${encodeURIComponent(serviceUrl)}`
-          let cur = casUrl
-          for (let i = 0; i < 10; i++) {
-            const r = await fetchWithJar(cur, session.jar, { headers: { Accept: 'text/html, */*' }, redirect: 'manual' })
-            const loc = r.headers.get('location')
-            await r.text()
-            if (!loc || !isRedirectStatus(r.status)) return null
-            const next = resolveUrl(loc, cur)
-            const m = next.match(/[?&]ticket=([^&]+)/)
-            if (m) return m[1]
-            cur = next
-          }
-          return null
-        }
-
-        const results = {}
-
-        // Just navigate to the web app like a browser would
-        const webResult = await followRedirectChain('https://campus-app.univ-rennes.fr/web/', session.jar, {
-          headers: { Accept: 'text/html,application/xhtml+xml,*/*' },
+        const url = new URL(req.url, 'http://localhost')
+        const targetDate = String(url.searchParams.get('date') || new Date().toISOString().slice(0, 10))
+        const requestedResourceId = String(url.searchParams.get('resourceId') || '')
+        const timetable = await fetchPlanningTimetableFromRpc(session.jar, targetDate, requestedResourceId, {
+          cacheScope: getPlanningCacheScope(session),
         })
-        const webHtml = await webResult.response.text()
-        results.chain = webResult.chain
-        results.finalUrl = webResult.finalUrl
-        results.status = webResult.response.status
-        results.bodySnippet = webHtml.slice(0, 1000)
-        results.cookies = session.jar.getCookieNamesForHost('campus-app.univ-rennes.fr')
 
-        sendJson(res, 200, { authenticated: true, events: [], debug: results })
+        setSessionCookie(res, session)
+        sendJson(res, 200, {
+          authenticated: true,
+          events: timetable.events,
+          weekLabel: timetable.weekLabel,
+          dayLabels: timetable.dayLabels,
+          resolvedWeek: timetable.resolvedWeek,
+          outOfRange: timetable.outOfRange,
+          debug: {
+            finalUrl: timetable.finalUrl,
+            planningIdentifier: timetable.planningIdentifier,
+            resourceId: timetable.resourceId,
+            currentResourceId: timetable.currentResourceId,
+            displayConfigurationId: timetable.displayConfigurationId,
+            weekIndex: timetable.weekIndex,
+            calendarWeekIndex: timetable.calendarWeekIndex,
+            requestedDateMatched: timetable.requestedDateMatched,
+            outOfRange: timetable.outOfRange,
+            cache: timetable.cache,
+            planningCookies: session.jar.getCookieNamesForHost('planning.univ-rennes1.fr'),
+          },
+        })
       } catch (error) {
         sendJson(res, 500, {
           error: error instanceof Error ? error.message : String(error),
@@ -926,8 +1673,116 @@ function createEntDevAuthPlugin() {
         return
       }
 
-      const session = getSessionFromRequest(req, sessions)
+      const session = getSessionFromRequest(req)
       if (!session) {
+        res.statusCode = 302
+        res.setHeader('Location', targetUrl)
+        res.end()
+        return
+      }
+
+      if (isMoodleLaunchTarget(targetUrl)) {
+        try {
+          const relay = await prepareMoodleLaunchRelay(session)
+
+          if (debug) {
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({
+              finalUrl: relay.finalUrl,
+              chain: relay.chain,
+              useServerLaunch: true,
+              reason: relay.reason,
+              canUseServerLaunch: relay.canUseServerLaunch,
+              degraded: relay.degraded,
+              degradedReason: relay.degradedReason,
+            }))
+            return
+          }
+
+          res.statusCode = 200
+          res.setHeader('Cache-Control', 'no-store')
+          res.setHeader('Content-Type', 'text/html; charset=utf-8')
+          res.end(buildAutoSubmitPage({
+            title: 'Connexion Moodle',
+            heading: 'Connexion a Moodle en cours',
+            body: 'Ouverture de votre session universitaire pour Moodle...',
+            actionUrl: relay.actionUrl,
+            fields: relay.fields,
+          }))
+          return
+        } catch (error) {
+          if (session?.credentials?.username && session?.credentials?.password) {
+            try {
+              const bootstrap = await prepareMoodleBrowserBootstrap(session.credentials)
+
+              if (debug) {
+                res.setHeader('Content-Type', 'application/json')
+                res.end(JSON.stringify({
+                  finalUrl: bootstrap.actionUrl,
+                  chain: [],
+                  useServerLaunch: true,
+                  reason: 'browser-cas-bootstrap',
+                }))
+                return
+              }
+
+              res.statusCode = 200
+              res.setHeader('Cache-Control', 'no-store')
+              res.setHeader('Content-Type', 'text/html; charset=utf-8')
+              res.end(buildAutoSubmitPage({
+                title: 'Connexion Moodle',
+                heading: 'Connexion a Moodle en cours',
+                body: 'Ouverture de votre session universitaire pour Moodle...',
+                actionUrl: bootstrap.actionUrl,
+                fields: bootstrap.fields,
+                warmupUrl: bootstrap.warmupUrl,
+              }))
+              return
+            } catch (bootstrapError) {
+              if (debug) {
+                res.setHeader('Content-Type', 'application/json')
+                res.end(JSON.stringify({
+                  finalUrl: targetUrl,
+                  chain: [],
+                  useServerLaunch: false,
+                  reason: 'moodle-launch-error',
+                  error: bootstrapError instanceof Error ? bootstrapError.message : String(bootstrapError),
+                  relayError: error instanceof Error ? error.message : String(error),
+                }))
+                return
+              }
+            }
+          } else if (debug) {
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({
+              finalUrl: targetUrl,
+              chain: [],
+              useServerLaunch: false,
+              reason: 'moodle-launch-error',
+              error: error instanceof Error ? error.message : String(error),
+            }))
+            return
+          }
+
+          res.statusCode = 302
+          res.setHeader('Location', targetUrl)
+          res.end()
+          return
+        }
+      }
+
+      const launchCapabilities = getSessionLaunchCapabilities(session)
+      if (!launchCapabilities.canUseServerLaunch) {
+        if (debug) {
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({
+            finalUrl: targetUrl,
+            chain: [],
+            ...launchCapabilities,
+          }))
+          return
+        }
+
         res.statusCode = 302
         res.setHeader('Location', targetUrl)
         res.end()
@@ -1012,6 +1867,40 @@ function createEntDevAuthPlugin() {
       }
     })
 
+    middlewares.use('/__ent_auth/launch-preview', async (req, res, next) => {
+      if (req.method !== 'GET') {
+        next()
+        return
+      }
+
+      const url = new URL(req.url, 'http://localhost')
+      const targetUrl = url.searchParams.get('url') || ''
+
+      if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) {
+        sendJson(res, 400, {
+          finalUrl: String(targetUrl ?? ''),
+          chain: [],
+          useServerLaunch: false,
+          reason: 'invalid-target-url',
+        })
+        return
+      }
+
+      try {
+        const session = getSessionFromRequest(req)
+        const preview = await previewServerLaunch(targetUrl, session)
+        sendJson(res, 200, preview)
+      } catch (error) {
+        sendJson(res, 500, {
+          finalUrl: targetUrl,
+          chain: [],
+          useServerLaunch: false,
+          reason: 'preview-error',
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    })
+
     middlewares.use('/__ent_auth/grades', async (req, res, next) => {
       if (req.method !== 'GET') {
         next()
@@ -1019,20 +1908,14 @@ function createEntDevAuthPlugin() {
       }
 
       try {
-        const session = getSessionFromRequest(req, sessions)
+        const session = getSessionFromRequest(req)
 
         if (!session) {
           sendJson(res, 200, { authenticated: false, grades: null })
           return
         }
 
-        const NOTES9_ORIGIN = 'https://notes9.iutlan.univ-rennes1.fr'
-
-        // Authenticate via doAuth.php → CAS to establish a notes9 PHP session
-        const doAuthUrl = `${NOTES9_ORIGIN}/services/doAuth.php?href=${encodeURIComponent(`${NOTES9_ORIGIN}/`)}`
-        await followRedirectChain(doAuthUrl, session.jar, {
-          headers: { Accept: 'text/html,application/xhtml+xml,*/*' },
-        })
+        await ensureNotes9Session(session.jar)
 
         // Fetch all grades data in one request (auth + semesters + first relevé)
         const dataUrl = `${NOTES9_ORIGIN}/services/data.php?q=dataPremi%C3%A8reConnexion`
@@ -1059,6 +1942,65 @@ function createEntDevAuthPlugin() {
       }
     })
 
+    middlewares.use('/__ent_auth/student-pic', async (req, res, next) => {
+      if (req.method !== 'GET') {
+        next()
+        return
+      }
+
+      try {
+        const wantsMeta = new URL(req.url, 'http://localhost').searchParams.get('meta') === '1'
+        const session = getSessionFromRequest(req)
+
+        if (!session) {
+          sendJson(res, 200, {
+            authenticated: false,
+            available: false,
+            source: 'notes9',
+            previewUrl: null,
+          })
+          return
+        }
+
+        const picture = await fetchNotes9StudentPic(session.jar)
+        const isImage = isNotes9StudentPicImage(picture)
+        res.setHeader('Cache-Control', 'no-store')
+
+        if (wantsMeta) {
+          sendJson(res, 200, {
+            authenticated: true,
+            available: picture.ok && isImage,
+            source: 'notes9',
+            contentType: picture.contentType,
+            size: picture.size,
+            status: picture.status,
+            previewUrl: picture.ok && isImage ? '/__ent_auth/student-pic' : null,
+          })
+          return
+        }
+
+        if (!picture.ok || !isImage) {
+          sendJson(res, 404, {
+            available: false,
+            source: 'notes9',
+            contentType: picture.contentType,
+            status: picture.status,
+          })
+          return
+        }
+
+        res.statusCode = 200
+        res.setHeader('Cache-Control', 'no-store')
+        res.setHeader('Content-Type', picture.contentType)
+        res.setHeader('Content-Length', String(picture.size))
+        res.end(picture.buffer)
+      } catch (error) {
+        sendJson(res, 500, {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    })
+
     // ==== ADE Schedule API ====
 
     middlewares.use('/__ent_auth/ade/status', async (req, res, next) => {
@@ -1073,22 +2015,81 @@ function createEntDevAuthPlugin() {
       }
     })
 
+    middlewares.use('/__ent_auth/ade/calendar', async (req, res, next) => {
+      if (req.method !== 'GET') { next(); return }
+
+      try {
+        const entSession = getSessionFromRequest(req)
+        if (!entSession) { sendJson(res, 200, { authenticated: false, calendar: null }); return }
+
+        const url = new URL(req.url, 'http://localhost')
+        const targetDate = url.searchParams.get('date')?.trim() || null
+        const requestedResourceId = String(url.searchParams.get('resourceId') || '')
+        const calendar = await fetchPlanningCalendarMetadataFromRpc(entSession.jar, {
+          targetDate,
+          resourceId: requestedResourceId,
+          cacheScope: getPlanningCacheScope(entSession),
+        })
+
+        setSessionCookie(res, entSession)
+        sendJson(res, 200, {
+          authenticated: true,
+          calendar: {
+            source: 'planning.univ-rennes1.fr',
+            resourceId: calendar.resourceId,
+            currentResourceId: calendar.currentResourceId,
+            requestedResourceId: calendar.requestedResourceId,
+            targetDate: calendar.targetDate,
+            targetDateMatched: calendar.targetDateMatched,
+            outOfRange: calendar.outOfRange,
+            matchedWeek: calendar.matchedWeek,
+            currentWeek: calendar.currentWeek,
+            firstWeek: calendar.firstWeek,
+            lastWeek: calendar.lastWeek,
+            weekCount: calendar.weekCount,
+            weeks: calendar.weeks,
+          },
+          debug: {
+            finalUrl: calendar.finalUrl,
+            planningIdentifier: calendar.planningIdentifier,
+            displayConfigurationId: calendar.displayConfigurationId,
+            cache: calendar.cache,
+          },
+        })
+      } catch (error) {
+        sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) })
+      }
+    })
+
     middlewares.use('/__ent_auth/ade/tree', async (req, res, next) => {
       if (req.method !== 'GET') { next(); return }
 
       try {
-        const entSession = getSessionFromRequest(req, sessions)
+        const entSession = getSessionFromRequest(req)
         if (!entSession) { sendJson(res, 200, { authenticated: false, tree: null }); return }
 
-        const authResult = await authenticateToAde(entSession.jar, entSession.credentials)
         const url = new URL(req.url, 'http://localhost')
-        const etabsVets = url.searchParams.get('etabsVets') || ''
-        const apiPath = etabsVets
-          ? `/timetable/getVetTree?etabsVets=${encodeURIComponent(etabsVets)}`
-          : '/timetable/getVetTree'
-        const result = await fetchAdeApi(apiPath, authResult.session)
+        const requestedTreeId = url.searchParams.get('etabsVets') || ''
+        const tree = await fetchPlanningTreeFromRpc(entSession.jar, requestedTreeId, {
+          cacheScope: getPlanningCacheScope(entSession),
+        })
 
-        sendJson(res, 200, { authenticated: true, tree: result.data, debug: { apiStatus: result.status, apiOk: result.ok, ...authResult } })
+        setSessionCookie(res, entSession)
+        sendJson(res, 200, {
+          authenticated: true,
+          tree: {
+            source: 'planning.univ-rennes1.fr',
+            root: tree.root,
+            currentResourceId: tree.currentResourceId,
+            focusResourceId: tree.focusResourceId,
+            currentPathIds: tree.currentPathIds,
+          },
+          debug: {
+            finalUrl: tree.finalUrl,
+            planningIdentifier: tree.planningIdentifier,
+            cache: tree.cache,
+          },
+        })
       } catch (error) {
         sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) })
       }
@@ -1098,14 +2099,16 @@ function createEntDevAuthPlugin() {
       if (req.method !== 'GET') { next(); return }
 
       try {
-        const entSession = getSessionFromRequest(req, sessions)
+        const entSession = getSessionFromRequest(req)
         if (!entSession) { sendJson(res, 200, { authenticated: false, results: null }); return }
 
         const url = new URL(req.url, 'http://localhost')
         const query = url.searchParams.get('q') || ''
         if (!query.trim()) { sendJson(res, 400, { error: 'Query parameter "q" is required.' }); return }
 
-        const authResult = await authenticateToAde(entSession.jar, entSession.credentials)
+        const authResult = await authenticateToAde(entSession.jar, entSession.credentials, {
+          cacheScope: getPlanningCacheScope(entSession),
+        })
         const result = await fetchAdeApi(`/timetable/vetSearch?q=${encodeURIComponent(query)}`, authResult.session)
 
         sendJson(res, 200, { authenticated: true, results: result.data, debug: { apiStatus: result.status, apiOk: result.ok, ...authResult } })
@@ -1118,23 +2121,97 @@ function createEntDevAuthPlugin() {
       if (req.method !== 'GET') { next(); return }
 
       try {
-        const entSession = getSessionFromRequest(req, sessions)
+        const entSession = getSessionFromRequest(req)
         if (!entSession) { sendJson(res, 200, { authenticated: false, timetable: null }); return }
 
-        const authResult = await authenticateToAde(entSession.jar, entSession.credentials)
         const url = new URL(req.url, 'http://localhost')
-        const params = new URLSearchParams()
-        params.set('date', url.searchParams.get('date') || new Date().toISOString().split('T')[0])
-        params.set('nbDays', url.searchParams.get('nbDays') || '14')
-        params.set('refresh', url.searchParams.get('refresh') || '0')
+        const requestedDate = String(url.searchParams.get('date') || new Date().toISOString().slice(0, 10))
+        const requestedResourceId = String(url.searchParams.get('resourceId') || '')
+        const timetable = await fetchPlanningTimetableFromRpc(entSession.jar, requestedDate, requestedResourceId, {
+          cacheScope: getPlanningCacheScope(entSession),
+        })
 
-        for (const [key, value] of url.searchParams.entries()) {
-          if (!params.has(key)) params.set(key, value)
+        setSessionCookie(res, entSession)
+        sendJson(res, 200, {
+          authenticated: true,
+          timetable: {
+            source: 'planning.univ-rennes1.fr',
+            date: requestedDate,
+            resourceId: timetable.resourceId,
+            weekLabel: timetable.weekLabel,
+            resolvedWeek: timetable.resolvedWeek,
+            outOfRange: timetable.outOfRange,
+            dayLabels: timetable.dayLabels,
+            events: timetable.events,
+          },
+          debug: {
+            finalUrl: timetable.finalUrl,
+            planningIdentifier: timetable.planningIdentifier,
+            resourceId: timetable.resourceId,
+            currentResourceId: timetable.currentResourceId,
+            displayConfigurationId: timetable.displayConfigurationId,
+            weekIndex: timetable.weekIndex,
+            calendarWeekIndex: timetable.calendarWeekIndex,
+            requestedDateMatched: timetable.requestedDateMatched,
+            outOfRange: timetable.outOfRange,
+            cache: timetable.cache,
+          },
+        })
+      } catch (error) {
+        sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) })
+      }
+    })
+
+    middlewares.use('/__ent_auth/ade/upcoming', async (req, res, next) => {
+      if (req.method !== 'POST') { next(); return }
+
+      try {
+        const entSession = getSessionFromRequest(req)
+        if (!entSession) {
+          sendJson(res, 200, { authenticated: false, upcoming: null })
+          return
         }
 
-        const result = await fetchAdeApi(`/timetable/getLastFromResources?${params.toString()}`, authResult.session)
+        const body = await readJsonBody(req)
+        const requestedDate = typeof body.date === 'string' && body.date.trim()
+          ? body.date.trim()
+          : new Date().toISOString().slice(0, 10)
+        const lookaheadDays = Math.max(
+          1,
+          Math.min(21, Number.parseInt(String(body.lookaheadDays ?? '14'), 10) || 14),
+        )
+        const selection = body.selection && typeof body.selection === 'object'
+          ? body.selection
+          : null
+        const upcoming = await resolveAdeUpcoming(entSession.jar, entSession.credentials, {
+          date: requestedDate,
+          lookaheadDays,
+          resourceIds: getAdeSelectionResourceIds(selection),
+          selectionLabels: getAdeSelectionLabels(selection),
+          cacheScope: getPlanningCacheScope(entSession),
+        })
 
-        sendJson(res, 200, { authenticated: true, timetable: result.data, debug: { apiStatus: result.status, apiOk: result.ok, ...authResult } })
+        setSessionCookie(res, entSession)
+        sendJson(res, 200, {
+          authenticated: true,
+          upcoming: {
+            source: upcoming.source,
+            date: requestedDate,
+            lookaheadDays,
+            complete: upcoming.complete,
+            resourceIds: upcoming.resourceIds,
+            selectionLabels: upcoming.selectionLabels,
+            events: upcoming.events,
+            nextEvent: upcoming.nextEvent,
+          },
+          debug: {
+            apiStatus: upcoming.apiStatus,
+            authMode: upcoming.authMode,
+            cache: upcoming.cache,
+            sessionCache: upcoming.sessionCache,
+            fallback: upcoming.fallback,
+          },
+        })
       } catch (error) {
         sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) })
       }
@@ -1144,10 +2221,12 @@ function createEntDevAuthPlugin() {
       if (req.method !== 'GET') { next(); return }
 
       try {
-        const entSession = getSessionFromRequest(req, sessions)
+        const entSession = getSessionFromRequest(req)
         if (!entSession) { sendJson(res, 200, { authenticated: false, alerts: null }); return }
 
-        const authResult = await authenticateToAde(entSession.jar, entSession.credentials)
+        const authResult = await authenticateToAde(entSession.jar, entSession.credentials, {
+          cacheScope: getPlanningCacheScope(entSession),
+        })
         const url = new URL(req.url, 'http://localhost')
         const etabsVets = url.searchParams.get('etabsVets') || ''
         const apiPath = etabsVets
@@ -1167,9 +2246,9 @@ function createEntDevAuthPlugin() {
         return
       }
 
-      const session = getSessionFromRequest(req, sessions)
-      if (session) {
-        sessions.delete(session.id)
+      const session = getSessionFromRequest(req)
+      if (session?.id) {
+        runtimeSessions.delete(session.id)
       }
 
       clearLocalSessionCookie(res)
@@ -1192,7 +2271,7 @@ function createEntDevAuthPlugin() {
       if (typeof manualCookie === 'string' && manualCookie.trim()) {
         proxyReq.setHeader('cookie', manualCookie.trim())
       } else {
-        const session = getSessionFromRequest(req, sessions)
+        const session = getSessionFromRequest(req)
         if (session) {
           const targetUrl = buildEntProxyTargetUrl(req.url)
           const cookieHeader = session.jar.getCookieHeader(targetUrl)
@@ -1228,7 +2307,7 @@ function createEntDevAuthPlugin() {
       proxyReq.removeHeader('x-ent-extra-headers')
     },
     applyProxyResponse(proxyRes, req) {
-      const session = getSessionFromRequest(req, sessions)
+      const session = getSessionFromRequest(req)
       if (session) {
         const targetUrl = buildEntProxyTargetUrl(req.url)
         session.jar.setFromProxySetCookie(proxyRes.headers['set-cookie'], targetUrl)
@@ -1241,13 +2320,21 @@ function createEntDevAuthPlugin() {
 
 const entDevAuthPlugin = createEntDevAuthPlugin()
 
+const gitHash = (() => {
+  try { return execSync('git rev-parse --short HEAD').toString().trim() }
+  catch { return 'dev' }
+})()
+
 export default defineConfig({
+  define: {
+    __BUILD_HASH__: JSON.stringify(gitHash),
+  },
   plugins: [
     tailwindcss(),
     react(),
     entDevAuthPlugin,
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       workbox: {
         navigateFallbackDenylist: [/^\/__ent_auth/, /^\/__ent_proxy/],

@@ -144,8 +144,8 @@ export async function getAuthSession() {
 }
 
 export async function loginToEnt({ username, password }) {
-  // Clear stale grades cache so a fresh fetch happens after login
-  localStorage.removeItem(GRADES_CACHE_KEY)
+  clearGradesCache()
+  localStorage.removeItem(ADE_TIMETABLE_CACHE_KEY)
 
   const response = await fetch(`${ENT_AUTH_PREFIX}/login`, {
     method: 'POST',
@@ -160,6 +160,9 @@ export async function loginToEnt({ username, password }) {
 }
 
 export async function logoutFromEnt() {
+  clearGradesCache()
+  localStorage.removeItem(ADE_TIMETABLE_CACHE_KEY)
+
   const response = await fetch(`${ENT_AUTH_PREFIX}/logout`, {
     method: 'POST',
     credentials: 'same-origin',
@@ -205,22 +208,9 @@ export async function getPlanning() {
 }
 
 const GRADES_CACHE_KEY = 'l-ent:grades-cache'
-const GRADES_CACHE_TTL_MS = 30 * 60 * 1000
 
 export async function getGrades({ force = false } = {}) {
-  if (!force) {
-    try {
-      const raw = localStorage.getItem(GRADES_CACHE_KEY)
-      if (raw) {
-        const cached = JSON.parse(raw)
-        if (cached?.data && Date.now() - cached.cachedAt < GRADES_CACHE_TTL_MS) {
-          return cached.data
-        }
-      }
-    } catch {
-      // ignore corrupt cache
-    }
-  }
+  void force
 
   const response = await fetch(`${ENT_AUTH_PREFIX}/grades`, {
     credentials: 'same-origin',
@@ -228,16 +218,16 @@ export async function getGrades({ force = false } = {}) {
 
   const data = await parseJsonPayload(response)
 
-  // Only cache authenticated responses with actual grades data
-  if (data.authenticated && data.grades) {
-    try {
-      localStorage.setItem(GRADES_CACHE_KEY, JSON.stringify({ data, cachedAt: Date.now() }))
-    } catch {
-      // storage full
-    }
-  }
-
   return data
+}
+
+export async function getStudentProfilePictureMeta() {
+  const response = await fetch(`${ENT_AUTH_PREFIX}/student-pic?meta=1&ts=${Date.now()}`, {
+    cache: 'no-store',
+    credentials: 'same-origin',
+  })
+
+  return parseJsonPayload(response)
 }
 
 export function clearGradesCache() {
@@ -438,15 +428,76 @@ export async function searchAde(query) {
   return parseJsonPayload(response)
 }
 
-export async function getAdeTimetable({ date, force = false, ...extra } = {}) {
+function buildAdeQueryString({ date, ...extra } = {}) {
+  const params = new URLSearchParams()
+
+  if (date) {
+    params.set('date', date)
+  }
+
+  for (const [key, value] of Object.entries(extra)) {
+    if (value != null) {
+      params.set(key, String(value))
+    }
+  }
+
+  return params.toString()
+}
+
+export async function getAdeCalendarMetadata({ date, ...extra } = {}) {
+  const qs = buildAdeQueryString({ date, ...extra })
+  const response = await fetch(
+    `${ENT_AUTH_PREFIX}/ade/calendar${qs ? `?${qs}` : ''}`,
+    { credentials: 'same-origin' },
+  )
+
+  return parseJsonPayload(response)
+}
+
+export async function getAdeUpcoming({
+  date,
+  lookaheadDays = 14,
+  selection = null,
+  signal,
+} = {}) {
+  const response = await fetch(`${ENT_AUTH_PREFIX}/ade/upcoming`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      date,
+      lookaheadDays,
+      selection,
+    }),
+    signal,
+  })
+
+  return parseJsonPayload(response)
+}
+
+export async function getAdeTimetable({
+  date,
+  force = false,
+  persist = true,
+  signal,
+  ...extra
+} = {}) {
+  const requestKey = buildAdeQueryString({ date, ...extra })
+
   if (!force) {
     try {
       const raw = localStorage.getItem(ADE_TIMETABLE_CACHE_KEY)
       if (raw) {
         const cached = JSON.parse(raw)
         if (cached?.data && Date.now() - cached.cachedAt < ADE_TIMETABLE_CACHE_TTL_MS) {
-          // Only return cache if the requested date matches
-          if (!date || cached.date === date) {
+          if (cached.requestKey === requestKey) {
+            return cached.data
+          }
+
+          // Legacy cache entries were keyed only by date.
+          if (!cached.requestKey && !requestKey && (!date || cached.date === date)) {
             return cached.data
           }
         }
@@ -456,25 +507,28 @@ export async function getAdeTimetable({ date, force = false, ...extra } = {}) {
     }
   }
 
-  const params = new URLSearchParams()
-  if (date) params.set('date', date)
-  for (const [key, value] of Object.entries(extra)) {
-    if (value != null) params.set(key, String(value))
-  }
-  const qs = params.toString()
+  const qs = requestKey
 
   const response = await fetch(
     `${ENT_AUTH_PREFIX}/ade/timetable${qs ? `?${qs}` : ''}`,
-    { credentials: 'same-origin' },
+    {
+      credentials: 'same-origin',
+      signal,
+    },
   )
 
   const data = await parseJsonPayload(response)
 
-  if (data.authenticated && data.timetable) {
+  if (persist && data.authenticated && data.timetable) {
     try {
       localStorage.setItem(
         ADE_TIMETABLE_CACHE_KEY,
-        JSON.stringify({ data, date: date || new Date().toISOString().split('T')[0], cachedAt: Date.now() }),
+        JSON.stringify({
+          data,
+          date: date || new Date().toISOString().split('T')[0],
+          requestKey,
+          cachedAt: Date.now(),
+        }),
       )
     } catch {
       // storage full

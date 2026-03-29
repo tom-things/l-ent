@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { ENT_AUTH_PREFIX, getLatestGrade } from '../entApi'
 
@@ -26,8 +26,6 @@ function WidgetLatestGrade({ visible = false }) {
   const [isReady, setIsReady] = useState(false)
   const [wide, setWide] = useState(false)
   const titleRef = useRef(null)
-  const visibleRef = useRef(visible)
-  visibleRef.current = visible
 
   useEffect(() => {
     let mounted = true
@@ -44,18 +42,21 @@ function WidgetLatestGrade({ visible = false }) {
 
   useEffect(() => {
     if (!grade || isReady) return
-    const el = titleRef.current
-    if (el && el.scrollWidth > el.clientWidth) {
-      setWide(true)
-    }
-    if (visible) {
-      // Grade arrived late (visible is already true) — wait one frame
-      // so the element renders hidden first, then animate in.
-      window.requestAnimationFrame(() => setIsReady(true))
-    }
+    const frameId = window.requestAnimationFrame(() => {
+      const el = titleRef.current
+      setWide(Boolean(el && el.scrollWidth > el.clientWidth))
+
+      if (visible) {
+        // Grade arrived late (visible is already true) — wait one frame
+        // so the element renders hidden first, then animate in.
+        setIsReady(true)
+      }
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
   }, [grade, visible, isReady])
 
-  const accentColor = useMemo(() => grade?.resource ? getGradeColor(grade.resource) : '#0073d1', [grade?.resource])
+  const accentColor = grade?.resource ? getGradeColor(grade.resource) : '#0073d1'
   const noteDisplay = grade?.note ? String(parseFloat(grade.note)) : '—'
   const noteMax = grade?.noteSur ? String(Math.round(parseFloat(grade.noteSur))) : '20'
 
@@ -63,7 +64,7 @@ function WidgetLatestGrade({ visible = false }) {
 
   return (
     <article
-      className={`latest-grade-widget widget-card shadow-md flex-[0_1_280px] min-h-[120px] p-5 border border-white rounded-[1.75rem] overflow-hidden bg-widget-bg text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-[min(280px,100%)] max-md:min-h-[108px] max-md:p-4 max-md:rounded-3xl max-xs:flex-[1_1_100%] max-xs:min-w-0 flex flex-col gap-[3px] text-text cursor-pointer relative ${wide ? 'flex-[0_1_360px]' : ''} ${isReady ? 'widget-card-visible' : ''}`}
+      className={`latest-grade-widget widget-card shadow-md flex-[0_1_280px] min-h-[120px] p-5 border border-white rounded-[1.75rem] overflow-hidden bg-widget-bg text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-0 max-md:min-h-[108px] max-md:p-4 max-md:rounded-3xl flex flex-col gap-[3px] text-text cursor-pointer relative ${wide ? '2xl:flex-[0_1_360px]' : ''} ${isReady ? 'widget-card-visible' : ''}`}
       aria-label="Dernière note"
       onClick={() => window.open(NOTES9_HREF, '_blank', 'noopener,noreferrer')}
       role="link"
@@ -92,7 +93,7 @@ function WidgetLatestGrade({ visible = false }) {
         </div>
         <div className="flex items-end justify-between gap-2 min-w-0">
           <span ref={titleRef} className="m-0 leading-[1.06] text-base font-medium min-w-0 overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[15px]">{grade.description}</span>
-          <span className="m-0 leading-[1.06] text-base font-medium opacity-60 shrink-0 max-md:text-[15px]">{grade.resource}</span>
+          <span className="m-0 leading-[1.06] text-base font-medium opacity-60 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[15px]">{grade.resource}</span>
         </div>
       </div>
     </article>

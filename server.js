@@ -4,6 +4,13 @@ import { createProxyMiddleware } from 'http-proxy-middleware'
 import { randomUUID, createHmac } from 'node:crypto'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  createAdeApiClient,
+  getAdeSelectionLabels,
+  getAdeSelectionResourceIds,
+} from './adeApi.js'
+import { createAdeUpcomingResolver } from './adeUpcomingResolver.js'
+import { createPlanningRpcClient } from './planningRpc.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -15,16 +22,27 @@ const PORT = process.env.PORT || 3000
 // ============================================================================
 const ENT_ORIGIN = 'https://services-numeriques.univ-rennes.fr'
 const CAS_ORIGIN = 'https://sso-cas.univ-rennes.fr'
-const PLANNING_ORIGIN = 'https://planning.univ-rennes1.fr'
-const PLANNING_SERVICE_URL = `${PLANNING_ORIGIN}/direct/myplanning.jsp`
 const ADE_ORIGIN = 'https://campus-app.univ-rennes.fr'
-const ADE_API_BASE = `${ADE_ORIGIN}/api`
+const MOODLE_ORIGIN = 'https://foad.univ-rennes.fr'
+const MOODLE_SHIBBOLETH_LOGIN_URL = `${MOODLE_ORIGIN}/auth/shibboleth/index.php`
+const NOTES9_ORIGIN = 'https://notes9.iutlan.univ-rennes1.fr'
+const RENNES_WAYF_ENTITY_ID = 'urn:mace:cru.fr:federation:univ-rennes1.fr'
 const DEFAULT_REFERER = `${ENT_ORIGIN}/f/services/normal/render.uP`
 const LOCAL_SESSION_COOKIE = 'ent_front_session'
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000
+const GRADES_CACHE_TTL_MS = 10 * 60 * 1000
+const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
+const LOGIN_RATE_LIMIT_BLOCK_MS = 15 * 60 * 1000
+const LOGIN_RATE_LIMIT_MAX_ATTEMPTS_PER_IP = 10
+const LOGIN_RATE_LIMIT_MAX_ATTEMPTS_PER_USERNAME = 5
+const MAX_PERSISTED_COOKIE_VALUE_LENGTH = 1024
 // SESSION_SECRET must be set in production env vars (Render.com → Environment).
 // Without it, sessions will not survive server restarts.
 const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-only-insecure-secret'
+const runtimeSessions = new Map()
+const runtimeGradesCache = new Map()
+const loginRateLimitByIp = new Map()
+const loginRateLimitByUsername = new Map()
 
 // Utility functions
 function escapeRegExp(value) {
@@ -165,6 +183,10 @@ class CookieJar {
       .sort((left, right) => left.localeCompare(right))
   }
 
+  hasCookie(hostname, cookieName) {
+    return this.getCookieNamesForHost(hostname).includes(String(cookieName))
+  }
+
   serialize() {
     return Array.from(this.store.entries())
   }
@@ -206,11 +228,88 @@ function decodeSession(cookieValue) {
   }
 }
 
+function isPersistableSessionCookie([, cookie]) {
+  if (!cookie || typeof cookie.value !== 'string') {
+    return false
+  }
+
+  if (cookie.value.length > MAX_PERSISTED_COOKIE_VALUE_LENGTH) {
+    return false
+  }
+
+  if (cookie.domain === 'sso-cas.univ-rennes.fr' && cookie.name === 'TGC') {
+    return false
+  }
+
+  return true
+}
+
+function buildPersistedSessionJar(session) {
+  if (!(session?.jar instanceof CookieJar)) {
+    return []
+  }
+
+  return session.jar.serialize().filter(isPersistableSessionCookie)
+}
+
+function pruneRuntimeSessions() {
+  const now = Date.now()
+
+  for (const [sessionId, session] of runtimeSessions.entries()) {
+    if (!session?.createdAt || now - session.createdAt > SESSION_TTL_MS) {
+      runtimeSessions.delete(sessionId)
+      runtimeGradesCache.delete(sessionId)
+    }
+  }
+}
+
+function pruneRuntimeGradesCache() {
+  const now = Date.now()
+
+  for (const [sessionId, entry] of runtimeGradesCache.entries()) {
+    if (!entry?.cachedAt || now - entry.cachedAt > GRADES_CACHE_TTL_MS) {
+      runtimeGradesCache.delete(sessionId)
+    }
+  }
+}
+
+function getCachedGrades(sessionId) {
+  if (!sessionId) {
+    return null
+  }
+
+  pruneRuntimeGradesCache()
+  return runtimeGradesCache.get(sessionId)?.data ?? null
+}
+
+function setCachedGrades(sessionId, grades) {
+  if (!sessionId) {
+    return
+  }
+
+  pruneRuntimeGradesCache()
+  runtimeGradesCache.set(sessionId, {
+    cachedAt: Date.now(),
+    data: grades,
+  })
+}
+
+function clearCachedGrades(sessionId) {
+  if (!sessionId) {
+    return
+  }
+
+  runtimeGradesCache.delete(sessionId)
+}
+
 function setSessionCookie(res, session) {
+  pruneRuntimeSessions()
+  runtimeSessions.set(session.id, session)
+
   const data = {
     id: session.id,
     user: session.user,
-    jar: session.jar.serialize(),
+    jar: buildPersistedSessionJar(session),
     createdAt: session.createdAt,
   }
   res.cookie(LOCAL_SESSION_COOKIE, encodeSession(data), {
@@ -310,7 +409,7 @@ function extractHiddenInputValue(html, inputName) {
 
 function extractFormAction(html, pageUrl) {
   const match = html.match(/<form[^>]+action=["']([^"']+)["']/i)
-  const action = match?.[1] ?? pageUrl
+  const action = match ? decodeHtmlEntities(match[1]) : pageUrl
   return resolveUrl(action, pageUrl)
 }
 
@@ -437,27 +536,730 @@ async function performEntLogin({ username, password }) {
   }
 }
 
+async function ensureNotes9Session(jar) {
+  const doAuthUrl = `${NOTES9_ORIGIN}/services/doAuth.php?href=${encodeURIComponent(`${NOTES9_ORIGIN}/`)}`
+  await followRedirectChain(doAuthUrl, jar, {
+    headers: { Accept: 'text/html,application/xhtml+xml,*/*' },
+  })
+}
+
+function isNotes9StudentPicImage(picture) {
+  return picture.ok && /^image\//i.test(picture.contentType) && picture.size > 0
+}
+
+async function requestNotes9StudentPic(jar) {
+  const pictureResponse = await fetchWithJar(`${NOTES9_ORIGIN}/services/data.php?q=getStudentPic`, jar, {
+    headers: {
+      Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      Referer: `${NOTES9_ORIGIN}/`,
+    },
+    redirect: 'follow',
+  })
+
+  const contentType = pictureResponse.headers.get('content-type') ?? 'application/octet-stream'
+  const buffer = Buffer.from(await pictureResponse.arrayBuffer())
+
+  return {
+    ok: pictureResponse.ok,
+    status: pictureResponse.status,
+    contentType,
+    size: buffer.length,
+    buffer,
+  }
+}
+
+async function fetchNotes9StudentPic(jar) {
+  await ensureNotes9Session(jar)
+
+  let picture = await requestNotes9StudentPic(jar)
+
+  if (isNotes9StudentPicImage(picture)) {
+    return picture
+  }
+
+  await ensureNotes9Session(jar)
+  picture = await requestNotes9StudentPic(jar)
+
+  return picture
+}
+
 function buildEntProxyTargetUrl(requestUrl) {
   const rewrittenPath = (requestUrl || '/').replace(/^\/__ent_proxy/, '') || '/'
   return new URL(rewrittenPath, ENT_ORIGIN).toString()
 }
 
+function getSessionLaunchCapabilities(session) {
+  const canUseServerLaunch = Boolean(session?.jar?.hasCookie('sso-cas.univ-rennes.fr', 'TGC'))
+
+  return {
+    canUseServerLaunch,
+    degraded: !canUseServerLaunch,
+    degradedReason: canUseServerLaunch ? null : 'missing-cas-tgc',
+  }
+}
+
 function getSessionFromRequest(req) {
+  pruneRuntimeSessions()
+
   const data = decodeSession(req.cookies[LOCAL_SESSION_COOKIE])
   if (!data) return null
+
+  const runtimeSession = runtimeSessions.get(data.id)
+  if (runtimeSession) {
+    runtimeSession.sessionSource = 'runtime'
+    return runtimeSession
+  }
+
   return {
     id: data.id,
     user: data.user,
     jar: CookieJar.fromSerialized(data.jar),
     createdAt: data.createdAt,
+    sessionSource: 'cookie',
   }
+}
+
+function getHostnameFromUrl(value) {
+  try {
+    return new URL(value).hostname
+  } catch {
+    return ''
+  }
+}
+
+function escapeHtmlAttribute(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/'/g, '&#39;')
+}
+
+function isMoodleLaunchTarget(targetUrl) {
+  return getHostnameFromUrl(targetUrl) === 'foad.univ-rennes.fr'
+}
+
+function isMoodleShibbolethPostTarget(targetUrl) {
+  return getHostnameFromUrl(targetUrl) === 'foad.univ-rennes.fr'
+    && /\/Shibboleth\.sso\//i.test(new URL(targetUrl).pathname)
+}
+
+function buildMoodleWayfRequest(pageUrl) {
+  const actionUrl = extractFormAction(pageUrl.html, pageUrl.url)
+  return {
+    actionUrl,
+    headers: {
+      Accept: pageUrl.acceptHeader,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Origin: new URL(actionUrl).origin,
+      Referer: pageUrl.url,
+    },
+    body: new URLSearchParams({
+      user_idp: RENNES_WAYF_ENTITY_ID,
+      Select: 'Sélection',
+    }).toString(),
+  }
+}
+
+function buildCasLoginRequest(html, pageUrl, credentials, acceptHeader) {
+  const username = String(credentials?.username ?? '').trim()
+  const password = String(credentials?.password ?? '')
+  const execution = extractHiddenInputValue(html, 'execution')
+
+  if (!execution) {
+    return null
+  }
+
+  if (!username || !password) {
+    throw new Error('Missing runtime credentials for Moodle launch.')
+  }
+
+  const actionUrl = extractFormAction(html, pageUrl)
+  return {
+    actionUrl,
+    headers: {
+      Accept: acceptHeader,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Origin: new URL(actionUrl).origin,
+      Referer: pageUrl,
+    },
+    body: new URLSearchParams({
+      username,
+      password,
+      execution,
+      _eventId: extractHiddenInputValue(html, '_eventId') || 'submit',
+      geolocation: extractHiddenInputValue(html, 'geolocation'),
+    }).toString(),
+  }
+}
+
+function parseFormFields(formBody) {
+  return Object.fromEntries(new URLSearchParams(formBody))
+}
+
+async function prepareMoodleLaunchRelay(session) {
+  const acceptHeader = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+  const launchCapabilities = getSessionLaunchCapabilities(session)
+  const chain = []
+  let currentUrl = MOODLE_SHIBBOLETH_LOGIN_URL
+  let currentMethod = 'GET'
+  let currentBody = undefined
+  let currentHeaders = { Accept: acceptHeader }
+
+  for (let attempt = 0; attempt < 15; attempt += 1) {
+    const response = await fetchWithJar(currentUrl, session.jar, {
+      method: currentMethod,
+      body: currentBody,
+      headers: currentHeaders,
+      redirect: 'manual',
+    })
+
+    const location = response.headers.get('location')
+    chain.push({
+      status: response.status,
+      url: currentUrl,
+      location,
+    })
+
+    if (isRedirectStatus(response.status) && location) {
+      currentUrl = resolveUrl(location, currentUrl)
+
+      if (response.status === 303 || ((response.status === 301 || response.status === 302) && currentMethod === 'POST')) {
+        currentMethod = 'GET'
+        currentBody = undefined
+        currentHeaders = { Accept: acceptHeader }
+      }
+
+      continue
+    }
+
+    const html = await response.text()
+    const htmlRedirect = extractHtmlRedirect(html, currentUrl)
+    if (htmlRedirect) {
+      currentUrl = htmlRedirect
+      currentMethod = 'GET'
+      currentBody = undefined
+      currentHeaders = { Accept: acceptHeader }
+      continue
+    }
+
+    const autoSubmitForm = extractAutoSubmitForm(html, currentUrl)
+    if (autoSubmitForm) {
+      if (isMoodleShibbolethPostTarget(autoSubmitForm.action)) {
+        return {
+          finalUrl: autoSubmitForm.action,
+          actionUrl: autoSubmitForm.action,
+          fields: parseFormFields(autoSubmitForm.body),
+          chain,
+          useServerLaunch: true,
+          reason: 'server-saml-relay',
+          ...launchCapabilities,
+        }
+      }
+
+      currentUrl = autoSubmitForm.action
+      currentMethod = 'POST'
+      currentBody = autoSubmitForm.body
+      currentHeaders = {
+        Accept: acceptHeader,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Origin: new URL(autoSubmitForm.action).origin,
+        Referer: currentUrl,
+      }
+      continue
+    }
+
+    if (/name=["']user_idp["']/i.test(html)) {
+      const wayfRequest = buildMoodleWayfRequest({
+        html,
+        url: currentUrl,
+        acceptHeader,
+      })
+      currentUrl = wayfRequest.actionUrl
+      currentMethod = 'POST'
+      currentBody = wayfRequest.body
+      currentHeaders = wayfRequest.headers
+      continue
+    }
+
+    const casLoginRequest = buildCasLoginRequest(html, currentUrl, session.credentials, acceptHeader)
+    if (casLoginRequest && getHostnameFromUrl(casLoginRequest.actionUrl).includes('sso-cas')) {
+      currentUrl = casLoginRequest.actionUrl
+      currentMethod = 'POST'
+      currentBody = casLoginRequest.body
+      currentHeaders = casLoginRequest.headers
+      continue
+    }
+
+    throw new Error('Unable to prepare the Moodle SSO handoff.')
+  }
+
+  throw new Error('Too many steps while preparing Moodle launch.')
+}
+
+async function prepareMoodleBrowserBootstrap(credentials) {
+  const username = String(credentials?.username ?? '').trim()
+  const password = String(credentials?.password ?? '')
+
+  if (!username || !password) {
+    throw new Error('Missing runtime credentials for Moodle launch.')
+  }
+
+  const browserJar = new CookieJar()
+  const acceptHeader = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+
+  const wayfPageResult = await followRedirectChain(MOODLE_SHIBBOLETH_LOGIN_URL, browserJar, {
+    headers: { Accept: acceptHeader },
+  })
+  const wayfPageHtml = await wayfPageResult.response.text()
+  const wayfActionUrl = extractFormAction(wayfPageHtml, wayfPageResult.finalUrl)
+  const wayfBody = new URLSearchParams({
+    user_idp: RENNES_WAYF_ENTITY_ID,
+    Select: 'Sélection',
+  }).toString()
+
+  const wayfSubmitResponse = await fetchWithJar(wayfActionUrl, browserJar, {
+    method: 'POST',
+    headers: {
+      Accept: acceptHeader,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Origin: new URL(wayfActionUrl).origin,
+      Referer: wayfPageResult.finalUrl,
+    },
+    body: wayfBody,
+    redirect: 'manual',
+  })
+
+  if (!isRedirectStatus(wayfSubmitResponse.status)) {
+    throw new Error('Unable to prepare the Moodle identity-provider handoff.')
+  }
+
+  const wayfLocation = wayfSubmitResponse.headers.get('location')
+  if (!wayfLocation) {
+    throw new Error('Moodle WAYF handoff did not return a redirect target.')
+  }
+
+  const browserWarmupUrl = resolveUrl(wayfLocation, wayfActionUrl)
+  const casLoginResult = await followRedirectChain(browserWarmupUrl, browserJar, {
+    headers: { Accept: acceptHeader },
+  })
+  const casLoginHtml = await casLoginResult.response.text()
+  const execution = extractHiddenInputValue(casLoginHtml, 'execution')
+
+  if (!execution) {
+    throw new Error('Unable to prepare the Rennes CAS login form for Moodle.')
+  }
+
+  return {
+    warmupUrl: browserWarmupUrl,
+    actionUrl: extractFormAction(casLoginHtml, casLoginResult.finalUrl),
+    fields: {
+      username,
+      password,
+      execution,
+      _eventId: extractHiddenInputValue(casLoginHtml, '_eventId') || 'submit',
+      geolocation: extractHiddenInputValue(casLoginHtml, 'geolocation'),
+    },
+  }
+}
+
+function buildAutoSubmitPage({ title, heading, body, actionUrl, fields, warmupUrl = '' }) {
+  const hiddenFields = Object.entries(fields).map(([name, value]) => (
+    `<input type="hidden" name="${escapeHtmlAttribute(name)}" value="${escapeHtmlAttribute(value)}" />`
+  )).join('')
+  const serializedWarmupUrl = JSON.stringify(String(warmupUrl ?? ''))
+  const warmupFrame = warmupUrl
+    ? '<iframe id="warmup" title="" aria-hidden="true" tabindex="-1" style="display:none"></iframe>'
+    : ''
+
+  return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-store" />
+  <title>${escapeHtmlAttribute(title)}</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #f7f8fb; color: #18212f; }
+    main { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+    section { width: min(420px, 100%); background: #fff; border-radius: 18px; padding: 28px; box-shadow: 0 18px 50px rgba(24, 33, 47, 0.12); }
+    h1 { margin: 0 0 12px; font-size: 1.15rem; }
+    p { margin: 0; line-height: 1.55; color: #48566a; }
+    button { margin-top: 18px; border: 0; border-radius: 999px; padding: 12px 18px; background: #0d6efd; color: #fff; font: inherit; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <main>
+    <section>
+      <h1>${escapeHtmlAttribute(heading)}</h1>
+      <p>${escapeHtmlAttribute(body)}</p>
+      <form id="handoff" method="post" action="${escapeHtmlAttribute(actionUrl)}">
+        ${hiddenFields}
+        <noscript><button type="submit">Continuer</button></noscript>
+      </form>
+      ${warmupFrame}
+    </section>
+  </main>
+  <script>
+    window.addEventListener('load', function () {
+      const form = document.getElementById('handoff')
+      if (!form) return
+
+      const warmupUrl = ${serializedWarmupUrl}
+      if (!warmupUrl) {
+        form.submit()
+        return
+      }
+
+      const iframe = document.getElementById('warmup')
+      let submitted = false
+      const submitForm = function () {
+        if (submitted) return
+        submitted = true
+        form.submit()
+      }
+
+      if (!iframe) {
+        submitForm()
+        return
+      }
+
+      iframe.addEventListener('load', function () {
+        window.setTimeout(submitForm, 120)
+      }, { once: true })
+
+      iframe.src = warmupUrl
+      window.setTimeout(submitForm, 4000)
+    })
+  </script>
+</body>
+</html>`
+}
+
+async function previewServerLaunch(targetUrl, session) {
+  if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) {
+    return {
+      finalUrl: String(targetUrl ?? ''),
+      chain: [],
+      useServerLaunch: false,
+      reason: 'invalid-target-url',
+    }
+  }
+
+  if (!session) {
+    return {
+      finalUrl: targetUrl,
+      chain: [],
+      useServerLaunch: false,
+      reason: 'missing-session',
+    }
+  }
+
+  const launchCapabilities = getSessionLaunchCapabilities(session)
+  if (isMoodleLaunchTarget(targetUrl)) {
+    if (launchCapabilities.canUseServerLaunch || (session?.credentials?.username && session?.credentials?.password)) {
+      return {
+        finalUrl: targetUrl,
+        chain: [],
+        useServerLaunch: true,
+        reason: 'server-saml-relay',
+        ...launchCapabilities,
+      }
+    }
+
+    return {
+      finalUrl: targetUrl,
+      chain: [],
+      useServerLaunch: false,
+      reason: 'missing-launch-credentials',
+      ...launchCapabilities,
+    }
+  }
+
+  if (!launchCapabilities.canUseServerLaunch) {
+    return {
+      finalUrl: targetUrl,
+      chain: [],
+      useServerLaunch: false,
+      reason: 'missing-cas-tgc',
+      ...launchCapabilities,
+    }
+  }
+
+  const chain = []
+  let currentUrl = targetUrl
+  const targetHost = getHostnameFromUrl(targetUrl)
+
+  try {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const response = await fetchWithJar(currentUrl, session.jar, {
+        redirect: 'manual',
+        headers: {
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+      })
+
+      const location = response.headers.get('location')
+      chain.push({ status: response.status, url: currentUrl, location })
+
+      const currentHost = getHostnameFromUrl(currentUrl)
+      if (isRedirectStatus(response.status) && location) {
+        const nextUrl = resolveUrl(location, currentUrl)
+        const nextHost = getHostnameFromUrl(nextUrl)
+
+        if (!currentHost.includes('sso-cas') && nextHost.includes('sso-cas')) {
+          return {
+            finalUrl: nextUrl,
+            chain,
+            useServerLaunch: true,
+            reason: 'cas-login',
+            ...launchCapabilities,
+          }
+        }
+
+        if (currentHost.includes('sso-cas') && !nextHost.includes('sso-cas')) {
+          if (nextHost === targetHost) {
+            return {
+              finalUrl: nextUrl,
+              chain,
+              useServerLaunch: true,
+              reason: 'cas-ticket',
+              ...launchCapabilities,
+            }
+          }
+
+          return {
+            finalUrl: targetUrl,
+            chain,
+            useServerLaunch: false,
+            saml: true,
+            reason: 'saml-browser-handoff',
+            ...launchCapabilities,
+          }
+        }
+
+        currentUrl = nextUrl
+        continue
+      }
+
+      const html = await response.text()
+      const htmlRedirect = extractHtmlRedirect(html, currentUrl)
+      if (htmlRedirect) {
+        const nextHost = getHostnameFromUrl(htmlRedirect)
+
+        if (!currentHost.includes('sso-cas') && nextHost.includes('sso-cas')) {
+          return {
+            finalUrl: htmlRedirect,
+            chain,
+            useServerLaunch: true,
+            reason: 'cas-html-redirect',
+            ...launchCapabilities,
+          }
+        }
+
+        currentUrl = htmlRedirect
+        continue
+      }
+
+      const autoSubmitForm = extractAutoSubmitForm(html, currentUrl)
+      if (autoSubmitForm) {
+        const actionHost = getHostnameFromUrl(autoSubmitForm.action)
+
+        if (actionHost.includes('sso-cas')) {
+          return {
+            finalUrl: autoSubmitForm.action,
+            chain,
+            useServerLaunch: true,
+            reason: 'cas-form',
+            ...launchCapabilities,
+          }
+        }
+
+        return {
+          finalUrl: currentUrl,
+          chain,
+          useServerLaunch: false,
+          reason: 'browser-form-handoff',
+          ...launchCapabilities,
+        }
+      }
+
+      return {
+        finalUrl: currentUrl,
+        chain,
+        useServerLaunch: false,
+        reason: 'direct-browser-launch',
+        ...launchCapabilities,
+      }
+    }
+
+    return {
+      finalUrl: currentUrl,
+      chain,
+      useServerLaunch: false,
+      reason: 'too-many-redirects',
+      error: 'too-many-redirects',
+      ...launchCapabilities,
+    }
+  } catch (error) {
+    return {
+      finalUrl: targetUrl,
+      chain,
+      useServerLaunch: false,
+      reason: 'preview-error',
+      error: error instanceof Error ? error.message : String(error),
+      ...launchCapabilities,
+    }
+  }
+}
+
+function getPlanningCacheScope(session) {
+  if (!session?.id) {
+    return null
+  }
+
+  return `session:${session.id}`
+}
+
+function clearSensitiveSessionCaches(session) {
+  const sessionId = session?.id ?? null
+  const cacheScope = getPlanningCacheScope(session)
+
+  clearCachedGrades(sessionId)
+  clearAdeCaches(cacheScope)
+  clearPlanningCaches(cacheScope)
+}
+
+function normalizeLoginIdentifier(username) {
+  return String(username ?? '').trim().toLowerCase()
+}
+
+function getLoginRequesterIp(req) {
+  return String(req.ip || req.socket?.remoteAddress || 'unknown')
+}
+
+function pruneLoginRateLimitStore(store) {
+  const now = Date.now()
+
+  for (const [key, entry] of store.entries()) {
+    if (!entry) {
+      store.delete(key)
+      continue
+    }
+
+    if (entry.blockedUntil && entry.blockedUntil > now) {
+      continue
+    }
+
+    if (!entry.firstFailureAt || now - entry.firstFailureAt > LOGIN_RATE_LIMIT_WINDOW_MS) {
+      store.delete(key)
+    }
+  }
+}
+
+function getRateLimitStatus(store, key) {
+  if (!key) {
+    return null
+  }
+
+  pruneLoginRateLimitStore(store)
+  const entry = store.get(key)
+
+  if (!entry?.blockedUntil) {
+    return null
+  }
+
+  const retryAfterMs = entry.blockedUntil - Date.now()
+  if (retryAfterMs <= 0) {
+    store.delete(key)
+    return null
+  }
+
+  return {
+    retryAfterMs,
+    retryAfterSeconds: Math.max(1, Math.ceil(retryAfterMs / 1000)),
+  }
+}
+
+function recordRateLimitFailure(store, key, maxAttempts) {
+  if (!key) {
+    return null
+  }
+
+  pruneLoginRateLimitStore(store)
+
+  const now = Date.now()
+  const currentEntry = store.get(key)
+  const resetWindow = !currentEntry?.firstFailureAt || now - currentEntry.firstFailureAt > LOGIN_RATE_LIMIT_WINDOW_MS
+  const nextEntry = resetWindow
+    ? { count: 1, firstFailureAt: now, blockedUntil: 0 }
+    : {
+        count: Number(currentEntry.count ?? 0) + 1,
+        firstFailureAt: currentEntry.firstFailureAt,
+        blockedUntil: currentEntry.blockedUntil ?? 0,
+      }
+
+  if (nextEntry.count >= maxAttempts) {
+    nextEntry.blockedUntil = now + LOGIN_RATE_LIMIT_BLOCK_MS
+  }
+
+  store.set(key, nextEntry)
+  return getRateLimitStatus(store, key)
+}
+
+function clearRateLimitEntry(store, key) {
+  if (!key) {
+    return
+  }
+
+  store.delete(key)
+}
+
+function getActiveLoginRateLimit(req, username) {
+  const ipKey = getLoginRequesterIp(req)
+  const usernameKey = normalizeLoginIdentifier(username)
+  const statuses = [
+    getRateLimitStatus(loginRateLimitByIp, ipKey),
+    getRateLimitStatus(loginRateLimitByUsername, usernameKey),
+  ].filter(Boolean)
+
+  if (statuses.length === 0) {
+    return null
+  }
+
+  return statuses.reduce((currentMax, status) => (
+    !currentMax || status.retryAfterMs > currentMax.retryAfterMs ? status : currentMax
+  ), null)
+}
+
+function recordLoginFailure(req, username) {
+  const ipKey = getLoginRequesterIp(req)
+  const usernameKey = normalizeLoginIdentifier(username)
+  const statuses = [
+    recordRateLimitFailure(loginRateLimitByIp, ipKey, LOGIN_RATE_LIMIT_MAX_ATTEMPTS_PER_IP),
+    recordRateLimitFailure(loginRateLimitByUsername, usernameKey, LOGIN_RATE_LIMIT_MAX_ATTEMPTS_PER_USERNAME),
+  ].filter(Boolean)
+
+  if (statuses.length === 0) {
+    return null
+  }
+
+  return statuses.reduce((currentMax, status) => (
+    !currentMax || status.retryAfterMs > currentMax.retryAfterMs ? status : currentMax
+  ), null)
+}
+
+function clearLoginRateLimit(req, username) {
+  clearRateLimitEntry(loginRateLimitByIp, getLoginRequesterIp(req))
+  clearRateLimitEntry(loginRateLimitByUsername, normalizeLoginIdentifier(username))
 }
 
 // ============================================================================
 // ICAL PARSER
 // ============================================================================
 
-function parseIcalEvents(icalText) {
+function _parseIcalEvents(icalText) {
   const events = []
   const blocks = icalText.split('BEGIN:VEVENT')
 
@@ -579,107 +1381,35 @@ function unescapeIcal(value) {
     .trim()
 }
 
-// ============================================================================
-// ADE (campus-app) HELPERS
-// ============================================================================
+const {
+  clearPlanningCaches,
+  fetchPlanningCalendarMetadataFromRpc,
+  fetchPlanningTimetableFromRpc,
+  fetchPlanningTreeFromRpc,
+} = createPlanningRpcClient({
+  casOrigin: CAS_ORIGIN,
+  fetchWithJar,
+  followRedirectChain,
+})
 
-// Headers matching the campus-app web client exactly.
-const ADE_APP_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
-  'Content-Type': 'application/json',
-  'Accept': 'application/json',
-  'x-app-version': '2.4.5',
-  'x-lang': 'fr',
-  'x-nav-lang': 'fr-FR',
-  'deviceid': 'null',
-  'devicemodel': '',
-  'devicemanufacturer': 'l-ent',
-  'deviceos': 'Web',
-  'deviceversion': '20030107',
-}
+const {
+  authenticateToAde,
+  clearAdeCaches,
+  fetchAdeApi,
+  fetchAdeUpcomingFromApi,
+} = createAdeApiClient({
+  adeOrigin: ADE_ORIGIN,
+  casOrigin: CAS_ORIGIN,
+  followRedirectChain,
+})
 
-async function authenticateToAde(jar) {
-  // Step 1: Get a CAS service ticket for campus-app.
-  const serviceUrl = `${ADE_ORIGIN}/`
-  const casLoginUrl = `${CAS_ORIGIN}/login?service=${encodeURIComponent(serviceUrl)}`
-
-  const casResult = await followRedirectChain(casLoginUrl, jar, {
-    headers: {
-      Accept: 'text/html,application/xhtml+xml,application/json,*/*',
-      'User-Agent': ADE_APP_HEADERS['User-Agent'],
-    },
-  })
-  await casResult.response.text()
-
-  // Extract CAS ticket and the actual service URL from the redirect chain.
-  // CAS appends ?ticket=ST-xxx to the registered service URL.
-  let ticket = null
-  let actualServiceUrl = serviceUrl
-
-  for (const hop of casResult.chain) {
-    for (const candidate of [hop.location, hop.url]) {
-      if (!candidate) continue
-      const match = candidate.match(/^([^?]+)\?.*ticket=([^&]+)/)
-      if (match) {
-        actualServiceUrl = match[1]
-        ticket = match[2]
-      }
-    }
-  }
-
-  if (!ticket) {
-    const finalMatch = casResult.finalUrl.match(/^([^?]+)\?.*ticket=([^&]+)/)
-    if (finalMatch) {
-      actualServiceUrl = finalMatch[1]
-      ticket = finalMatch[2]
-    }
-  }
-
-  if (!ticket) {
-    return { session: null, ticket: null, error: 'No CAS ticket obtained', finalUrl: casResult.finalUrl }
-  }
-
-  // Step 2: Exchange the CAS ticket for a session UUID.
-  // The service URL in the body must match what CAS used to issue the ticket.
-  const loginResponse = await fetch(`${ADE_API_BASE}/auth/login`, {
-    method: 'POST',
-    headers: {
-      ...ADE_APP_HEADERS,
-      'session': 'null',
-    },
-    body: JSON.stringify({ ticket, service: actualServiceUrl }),
-  })
-  const loginText = await loginResponse.text()
-  let loginData = null
-  try { loginData = JSON.parse(loginText) } catch { /* not JSON */ }
-
-  const session = loginData?.sessionId ?? loginData?.session ?? loginData?.token ?? null
-
-  return {
-    session,
-    ticket,
-    loginStatus: loginResponse.status,
-    loginData,
-    actualServiceUrl,
-    finalUrl: casResult.finalUrl,
-  }
-}
-
-async function fetchAdeApi(path, session) {
-  const url = `${ADE_API_BASE}${path}`
-  const response = await fetch(url, {
-    headers: {
-      ...ADE_APP_HEADERS,
-      'session': session || 'null',
-    },
-  })
-
-  const text = await response.text()
-  let data
-  try { data = JSON.parse(text) } catch { data = text }
-
-  return { ok: response.ok, status: response.status, data, text }
-}
+const {
+  resolveAdeUpcoming,
+} = createAdeUpcomingResolver({
+  fetchAdeUpcomingFromApi,
+  fetchPlanningTreeFromRpc,
+  fetchPlanningTimetableFromRpc,
+})
 
 // ============================================================================
 // EXPRESS MIDDLEWARE AND ROUTES
@@ -691,32 +1421,46 @@ app.use(express.json()) // Automatically parse incoming JSON requests for auth e
 // 1. Auth Status Endpoint
 app.get('/__ent_auth/session', async (req, res) => {
   try {
+    res.setHeader('Cache-Control', 'no-store')
     const session = getSessionFromRequest(req)
 
     if (!session) {
       return res.status(200).json({
         authenticated: false,
         user: null,
+        sessionSource: null,
+        degraded: false,
+        degradedReason: null,
+        canUseServerLaunch: false,
       })
     }
 
     const layout = await fetchEntLayout(session.jar)
 
     if (!layout.ok || !layout.data || String(layout.data.authenticated) !== 'true') {
+      clearSensitiveSessionCaches(session)
       res.clearCookie(LOCAL_SESSION_COOKIE)
       return res.status(200).json({
         authenticated: false,
         user: null,
+        sessionSource: null,
+        degraded: false,
+        degradedReason: null,
+        canUseServerLaunch: false,
       })
     }
 
     session.user = layout.data.user
     setSessionCookie(res, session)
+    const launchCapabilities = getSessionLaunchCapabilities(session)
 
     res.status(200).json({
       authenticated: true,
       user: layout.data.user,
+      sessionSource: session.sessionSource ?? null,
       cookieNames: session.jar.getCookieNamesForHost('services-numeriques.univ-rennes.fr'),
+      casCookieNames: session.jar.getCookieNamesForHost('sso-cas.univ-rennes.fr'),
+      ...launchCapabilities,
     })
   } catch (error) {
     res.status(500).json({
@@ -737,13 +1481,34 @@ app.post('/__ent_auth/login', async (req, res) => {
       })
     }
 
+    const activeRateLimit = getActiveLoginRateLimit(req, username)
+    if (activeRateLimit) {
+      res.setHeader('Retry-After', String(activeRateLimit.retryAfterSeconds))
+      return res.status(429).json({
+        error: 'Too many login attempts. Please try again later.',
+      })
+    }
+
     const result = await performEntLogin({ username, password })
+    clearLoginRateLimit(req, username)
     const session = {
       id: randomUUID(),
       user: result.layout.user,
       jar: result.jar,
+      credentials: { username, password },
       createdAt: Date.now(),
     }
+
+    // Prime the ADE session cache while we still have the fresh login credentials,
+    // but never persist those credentials on the long-lived app session.
+    try {
+      await authenticateToAde(result.jar, { username, password }, {
+        cacheScope: getPlanningCacheScope(session),
+      })
+    } catch (adeError) {
+      console.warn('ADE session bootstrap failed during login:', adeError)
+    }
+
     setSessionCookie(res, session)
 
     res.status(200).json({
@@ -751,6 +1516,14 @@ app.post('/__ent_auth/login', async (req, res) => {
       user: result.layout.user,
     })
   } catch (error) {
+    const rateLimit = recordLoginFailure(req, req.body?.username)
+    if (rateLimit) {
+      res.setHeader('Retry-After', String(rateLimit.retryAfterSeconds))
+      return res.status(429).json({
+        error: 'Too many login attempts. Please try again later.',
+      })
+    }
+
     res.status(401).json({
       error: error instanceof Error ? error.message : String(error),
     })
@@ -760,6 +1533,7 @@ app.post('/__ent_auth/login', async (req, res) => {
 // 3. Account Info Endpoint
 app.get('/__ent_auth/account', async (req, res) => {
   try {
+    res.setHeader('Cache-Control', 'no-store')
     const session = getSessionFromRequest(req)
 
     if (!session) {
@@ -823,116 +1597,31 @@ app.get('/__ent_auth/planning', async (req, res) => {
       return res.status(200).json({ authenticated: false, events: null })
     }
 
-    // 1. Establish a planning session via CAS
-    const casLoginUrl = `${CAS_ORIGIN}/login?service=${encodeURIComponent(PLANNING_SERVICE_URL)}`
-    const casResult = await followRedirectChain(casLoginUrl, session.jar, {
-      headers: { Accept: 'text/html,application/xhtml+xml,*/*' },
+    const targetDate = String(req.query.date ?? new Date().toISOString().slice(0, 10))
+    const requestedResourceId = String(req.query.resourceId ?? '')
+    const timetable = await fetchPlanningTimetableFromRpc(session.jar, targetDate, requestedResourceId, {
+      cacheScope: getPlanningCacheScope(session),
     })
-    await casResult.response.text()
 
-    // 2. Load GWT nocache.js to find the strong name (permutation)
-    let strongName = ''
-    const nocacheUrl = `${PLANNING_ORIGIN}/direct/gwtdirectplanning/gwtdirectplanning.nocache.js`
-    const nocacheResponse = await fetchWithJar(nocacheUrl, session.jar, {
-      headers: { Accept: '*/*' },
-      redirect: 'follow',
-    })
-    const nocacheJs = await nocacheResponse.text()
-
-    const strongNameMatch = nocacheJs.match(/='([A-F0-9]{32})'/i)
-      || nocacheJs.match(/\$strongName\s*=\s*'([A-F0-9]{32})'/i)
-      || nocacheJs.match(/'([A-F0-9]{32})'/i)
-    if (strongNameMatch) {
-      strongName = strongNameMatch[1]
-    }
-
-    // 3. Fetch serialization policy
-    let policyText = ''
-    if (strongName) {
-      const policyUrl = `${PLANNING_ORIGIN}/direct/gwtdirectplanning/${strongName}.gwt.rpc`
-      const policyResponse = await fetchWithJar(policyUrl, session.jar, {
-        headers: { Accept: '*/*' },
-        redirect: 'follow',
-      })
-      policyText = await policyResponse.text()
-    }
-
-    // 4. Probe the GWT RPC endpoint
-    const rpcUrl = `${PLANNING_ORIGIN}/direct/gwtdirectplanning/MyPlanningClientServiceProxy`
-    const moduleBase = `${PLANNING_ORIGIN}/direct/gwtdirectplanning/`
-    const rpcHeaders = {
-      'Content-Type': 'text/x-gwt-rpc; charset=utf-8',
-      'X-GWT-Module-Base': moduleBase,
-      ...(strongName ? { 'X-GWT-Permutation': strongName } : {}),
-    }
-
-    const probePayload = `7|0|4|${moduleBase}|${strongName}|com.adesoft.gwt.directplan.client.rpc.MyPlanningClientServiceProxy|method|1|2|3|4|0|`
-    const rpcResponse = await fetchWithJar(rpcUrl, session.jar, {
-      method: 'POST',
-      headers: rpcHeaders,
-      body: probePayload,
-      redirect: 'follow',
-    })
-    const rpcText = await rpcResponse.text()
-
-    // 5. Try the standard JSP interface to find resource IDs
-    const stdUrl = `${PLANNING_ORIGIN}/jsp/standard/gui/interface.jsp`
-    const stdResponse = await fetchWithJar(stdUrl, session.jar, {
-      headers: { Accept: 'text/html,*/*' },
-      redirect: 'follow',
-    })
-    const stdHtml = await stdResponse.text()
-
-    const projectMatch = stdHtml.match(/projectId[=:]\s*["']?(\d+)/i)
-      || stdHtml.match(/idProject[=:]\s*["']?(\d+)/i)
-    const resourceMatches = stdHtml.match(/resources?[=:]\s*["']?([\d,]+)/gi) ?? []
-    const dataMatches = stdHtml.match(/data=([a-f0-9]+)/gi) ?? []
-    const checkMatches = stdHtml.match(/check\(\s*(\d+)/gi) ?? []
-
-    // If we found resource IDs, try iCal
-    let icalText = ''
-    const today = new Date()
-    const firstDate = new Date(today)
-    firstDate.setDate(firstDate.getDate() - firstDate.getDay() + 1)
-    const lastDate = new Date(firstDate)
-    lastDate.setDate(lastDate.getDate() + 27)
-    const formatDate = (d) => d.toISOString().split('T')[0]
-
-    if (checkMatches.length > 0) {
-      const resourceIds = checkMatches.map((m) => m.match(/\d+/)?.[0]).filter(Boolean)
-      const projectId = projectMatch ? projectMatch[1] : '3'
-      const calUrl = `${PLANNING_ORIGIN}/jsp/custom/modules/plannings/anonymous_cal.jsp?resources=${resourceIds.join(',')}&projectId=${projectId}&calType=ical&firstDate=${formatDate(firstDate)}&lastDate=${formatDate(lastDate)}`
-
-      const calResponse = await fetchWithJar(calUrl, session.jar, {
-        headers: { Accept: 'text/calendar, */*' },
-        redirect: 'follow',
-      })
-      icalText = await calResponse.text()
-    }
-
-    if (icalText && icalText.includes('BEGIN:VCALENDAR')) {
-      return res.status(200).json({
-        authenticated: true,
-        events: parseIcalEvents(icalText),
-      })
-    }
-
-    // Return debug info
+    setSessionCookie(res, session)
     res.status(200).json({
       authenticated: true,
-      events: [],
+      events: timetable.events,
+      weekLabel: timetable.weekLabel,
+      dayLabels: timetable.dayLabels,
+      resolvedWeek: timetable.resolvedWeek,
+      outOfRange: timetable.outOfRange,
       debug: {
-        finalUrl: casResult.finalUrl,
-        strongName: strongName || null,
-        policyLength: policyText.length,
-        rpcStatus: rpcResponse.status,
-        rpcResponse: rpcText.slice(0, 1000),
-        stdInterfaceStatus: stdResponse.status,
-        stdSnippet: stdHtml.slice(0, 1500),
-        projectMatch: projectMatch?.[0] ?? null,
-        resourceMatches,
-        dataMatches,
-        checkMatches,
+        finalUrl: timetable.finalUrl,
+        planningIdentifier: timetable.planningIdentifier,
+        resourceId: timetable.resourceId,
+        currentResourceId: timetable.currentResourceId,
+        displayConfigurationId: timetable.displayConfigurationId,
+        weekIndex: timetable.weekIndex,
+        calendarWeekIndex: timetable.calendarWeekIndex,
+        requestedDateMatched: timetable.requestedDateMatched,
+        outOfRange: timetable.outOfRange,
+        cache: timetable.cache,
         planningCookies: session.jar.getCookieNamesForHost('planning.univ-rennes1.fr'),
       },
     })
@@ -944,6 +1633,23 @@ app.get('/__ent_auth/planning', async (req, res) => {
 })
 
 // 5. CAS Launch Endpoint — resolves CAS SSO for external app links
+app.get('/__ent_auth/launch-preview', async (req, res) => {
+  const targetUrl = req.query.url
+
+  if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) {
+    return res.status(400).json({
+      finalUrl: String(targetUrl ?? ''),
+      chain: [],
+      useServerLaunch: false,
+      reason: 'invalid-target-url',
+    })
+  }
+
+  const session = getSessionFromRequest(req)
+  const preview = await previewServerLaunch(targetUrl, session)
+  return res.status(200).json(preview)
+})
+
 app.get('/__ent_auth/launch', async (req, res) => {
   const targetUrl = req.query.url
   const debug = req.query.debug === '1'
@@ -954,6 +1660,96 @@ app.get('/__ent_auth/launch', async (req, res) => {
 
   const session = getSessionFromRequest(req)
   if (!session) {
+    return res.redirect(targetUrl)
+  }
+
+  if (isMoodleLaunchTarget(targetUrl)) {
+    try {
+      const relay = await prepareMoodleLaunchRelay(session)
+
+      if (debug) {
+        return res.json({
+          finalUrl: relay.finalUrl,
+          chain: relay.chain,
+          useServerLaunch: true,
+          reason: relay.reason,
+          canUseServerLaunch: relay.canUseServerLaunch,
+          degraded: relay.degraded,
+          degradedReason: relay.degradedReason,
+        })
+      }
+
+      res.setHeader('Cache-Control', 'no-store')
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.status(200).send(buildAutoSubmitPage({
+        title: 'Connexion Moodle',
+        heading: 'Connexion a Moodle en cours',
+        body: 'Ouverture de votre session universitaire pour Moodle...',
+        actionUrl: relay.actionUrl,
+        fields: relay.fields,
+      }))
+      return
+    } catch (error) {
+      if (session?.credentials?.username && session?.credentials?.password) {
+        try {
+          const bootstrap = await prepareMoodleBrowserBootstrap(session.credentials)
+
+          if (debug) {
+            return res.json({
+              finalUrl: bootstrap.actionUrl,
+              chain: [],
+              useServerLaunch: true,
+              reason: 'browser-cas-bootstrap',
+            })
+          }
+
+          res.setHeader('Cache-Control', 'no-store')
+          res.setHeader('Content-Type', 'text/html; charset=utf-8')
+          res.status(200).send(buildAutoSubmitPage({
+            title: 'Connexion Moodle',
+            heading: 'Connexion a Moodle en cours',
+            body: 'Ouverture de votre session universitaire pour Moodle...',
+            actionUrl: bootstrap.actionUrl,
+            fields: bootstrap.fields,
+            warmupUrl: bootstrap.warmupUrl,
+          }))
+          return
+        } catch (bootstrapError) {
+          if (debug) {
+            return res.json({
+              finalUrl: targetUrl,
+              chain: [],
+              useServerLaunch: false,
+              reason: 'moodle-launch-error',
+              error: bootstrapError instanceof Error ? bootstrapError.message : String(bootstrapError),
+              relayError: error instanceof Error ? error.message : String(error),
+            })
+          }
+        }
+      } else if (debug) {
+        return res.json({
+          finalUrl: targetUrl,
+          chain: [],
+          useServerLaunch: false,
+          reason: 'moodle-launch-error',
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+
+      return res.redirect(targetUrl)
+    }
+  }
+
+  const launchCapabilities = getSessionLaunchCapabilities(session)
+  if (!launchCapabilities.canUseServerLaunch) {
+    if (debug) {
+      return res.json({
+        finalUrl: targetUrl,
+        chain: [],
+        ...launchCapabilities,
+      })
+    }
+
     return res.redirect(targetUrl)
   }
 
@@ -1022,19 +1818,23 @@ app.get('/__ent_auth/launch', async (req, res) => {
 // 6. Grades Endpoint (IUT Lannion — notes9)
 app.get('/__ent_auth/grades', async (req, res) => {
   try {
+    res.setHeader('Cache-Control', 'no-store')
     const session = getSessionFromRequest(req)
 
     if (!session) {
       return res.status(200).json({ authenticated: false, grades: null })
     }
 
-    const NOTES9_ORIGIN = 'https://notes9.iutlan.univ-rennes1.fr'
+    const cachedGrades = getCachedGrades(session.id)
+    if (cachedGrades) {
+      setSessionCookie(res, session)
+      return res.status(200).json({
+        authenticated: true,
+        grades: cachedGrades,
+      })
+    }
 
-    // Authenticate via doAuth.php → CAS to establish a notes9 PHP session
-    const doAuthUrl = `${NOTES9_ORIGIN}/services/doAuth.php?href=${encodeURIComponent(`${NOTES9_ORIGIN}/`)}`
-    await followRedirectChain(doAuthUrl, session.jar, {
-      headers: { Accept: 'text/html,application/xhtml+xml,*/*' },
-    })
+    await ensureNotes9Session(session.jar)
 
     // Fetch all grades data in one request (auth + semesters + first relevé)
     const dataUrl = `${NOTES9_ORIGIN}/services/data.php?q=dataPremi%C3%A8reConnexion`
@@ -1046,12 +1846,77 @@ app.get('/__ent_auth/grades', async (req, res) => {
     let gradesData = null
     try { gradesData = JSON.parse(dataText) } catch { gradesData = dataText }
 
+    setCachedGrades(session.id, gradesData)
     setSessionCookie(res, session)
     res.status(200).json({
       authenticated: true,
       grades: gradesData,
     })
   } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+})
+
+app.get('/__ent_auth/student-pic', async (req, res) => {
+  try {
+    const wantsMeta = req.query.meta === '1'
+    const session = getSessionFromRequest(req)
+
+    if (!session) {
+      if (wantsMeta) {
+        return res.status(200).json({
+          authenticated: false,
+          available: false,
+          source: 'notes9',
+          previewUrl: null,
+        })
+      }
+
+      return res.status(401).json({
+        error: 'Authentication required.',
+      })
+    }
+
+    const picture = await fetchNotes9StudentPic(session.jar)
+    const isImage = isNotes9StudentPicImage(picture)
+
+    setSessionCookie(res, session)
+    res.setHeader('Cache-Control', 'no-store')
+
+    if (wantsMeta) {
+      return res.status(200).json({
+        authenticated: true,
+        available: picture.ok && isImage,
+        source: 'notes9',
+        contentType: picture.contentType,
+        size: picture.size,
+        status: picture.status,
+        previewUrl: picture.ok && isImage ? '/__ent_auth/student-pic' : null,
+      })
+    }
+
+    if (!picture.ok || !isImage) {
+      return res.status(404).json({
+        available: false,
+        source: 'notes9',
+        contentType: picture.contentType,
+        status: picture.status,
+      })
+    }
+
+    res.setHeader('Cache-Control', 'no-store')
+    res.setHeader('Content-Type', picture.contentType)
+    res.setHeader('Content-Length', String(picture.size))
+    res.status(200).end(picture.buffer)
+  } catch (error) {
+    if (req.query.meta === '1') {
+      return res.status(500).json({
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+
     res.status(500).json({
       error: error instanceof Error ? error.message : String(error),
     })
@@ -1072,27 +1937,85 @@ app.get('/__ent_auth/ade/status', async (req, res) => {
   }
 })
 
-// 8. ADE VET Tree
-app.get('/__ent_auth/ade/tree', async (req, res) => {
+// 8. ADE Calendar Metadata
+app.get('/__ent_auth/ade/calendar', async (req, res) => {
   try {
     const entSession = getSessionFromRequest(req)
-    if (!entSession) return res.status(200).json({ authenticated: false, tree: null })
+    if (!entSession) return res.status(200).json({ authenticated: false, calendar: null })
 
-    const authResult = await authenticateToAde(entSession.jar)
-    const etabsVets = req.query.etabsVets || ''
-    const apiPath = etabsVets
-      ? `/timetable/getVetTree?etabsVets=${encodeURIComponent(etabsVets)}`
-      : '/timetable/getVetTree'
-    const result = await fetchAdeApi(apiPath, authResult.session)
+    const targetDate = typeof req.query.date === 'string' && req.query.date.trim()
+      ? req.query.date.trim()
+      : null
+    const requestedResourceId = String(req.query.resourceId ?? '')
+    const calendar = await fetchPlanningCalendarMetadataFromRpc(entSession.jar, {
+      targetDate,
+      resourceId: requestedResourceId,
+      cacheScope: getPlanningCacheScope(entSession),
+    })
 
     setSessionCookie(res, entSession)
-    res.status(200).json({ authenticated: true, tree: result.data, debug: { apiStatus: result.status, apiOk: result.ok, ...authResult } })
+    res.status(200).json({
+      authenticated: true,
+      calendar: {
+        source: 'planning.univ-rennes1.fr',
+        resourceId: calendar.resourceId,
+        currentResourceId: calendar.currentResourceId,
+        requestedResourceId: calendar.requestedResourceId,
+        targetDate: calendar.targetDate,
+        targetDateMatched: calendar.targetDateMatched,
+        outOfRange: calendar.outOfRange,
+        matchedWeek: calendar.matchedWeek,
+        currentWeek: calendar.currentWeek,
+        firstWeek: calendar.firstWeek,
+        lastWeek: calendar.lastWeek,
+        weekCount: calendar.weekCount,
+        weeks: calendar.weeks,
+      },
+      debug: {
+        finalUrl: calendar.finalUrl,
+        planningIdentifier: calendar.planningIdentifier,
+        displayConfigurationId: calendar.displayConfigurationId,
+        cache: calendar.cache,
+      },
+    })
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
   }
 })
 
-// 9. ADE Search
+// 9. ADE VET Tree
+app.get('/__ent_auth/ade/tree', async (req, res) => {
+  try {
+    const entSession = getSessionFromRequest(req)
+    if (!entSession) return res.status(200).json({ authenticated: false, tree: null })
+
+    const requestedTreeId = String(req.query.etabsVets ?? '')
+    const tree = await fetchPlanningTreeFromRpc(entSession.jar, requestedTreeId, {
+      cacheScope: getPlanningCacheScope(entSession),
+    })
+
+    setSessionCookie(res, entSession)
+    res.status(200).json({
+      authenticated: true,
+      tree: {
+        source: 'planning.univ-rennes1.fr',
+        root: tree.root,
+        currentResourceId: tree.currentResourceId,
+        focusResourceId: tree.focusResourceId,
+        currentPathIds: tree.currentPathIds,
+      },
+      debug: {
+        finalUrl: tree.finalUrl,
+        planningIdentifier: tree.planningIdentifier,
+        cache: tree.cache,
+      },
+    })
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
+  }
+})
+
+// 10. ADE Search
 app.get('/__ent_auth/ade/search', async (req, res) => {
   try {
     const entSession = getSessionFromRequest(req)
@@ -1101,48 +2024,136 @@ app.get('/__ent_auth/ade/search', async (req, res) => {
     const query = req.query.q || ''
     if (!query.trim()) return res.status(400).json({ error: 'Query parameter "q" is required.' })
 
-    const authResult = await authenticateToAde(entSession.jar)
+    const authResult = await authenticateToAde(entSession.jar, entSession.credentials, {
+      cacheScope: getPlanningCacheScope(entSession),
+    })
     const result = await fetchAdeApi(`/timetable/vetSearch?q=${encodeURIComponent(query)}`, authResult.session)
 
     setSessionCookie(res, entSession)
-    res.status(200).json({ authenticated: true, results: result.data, debug: { apiStatus: result.status, apiOk: result.ok, ...authResult } })
+    res.status(200).json({
+      authenticated: true,
+      results: result.data,
+      debug: {
+        apiStatus: result.status,
+        apiOk: result.ok,
+        sessionSource: entSession.sessionSource ?? null,
+        ...authResult,
+      },
+    })
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
   }
 })
 
-// 10. ADE Timetable
+// 11. ADE Timetable
 app.get('/__ent_auth/ade/timetable', async (req, res) => {
   try {
     const entSession = getSessionFromRequest(req)
     if (!entSession) return res.status(200).json({ authenticated: false, timetable: null })
 
-    const authResult = await authenticateToAde(entSession.jar)
-    const params = new URLSearchParams()
-    params.set('date', req.query.date || new Date().toISOString().split('T')[0])
-    params.set('nbDays', req.query.nbDays || '14')
-    params.set('refresh', req.query.refresh || '0')
-
-    for (const [key, value] of Object.entries(req.query)) {
-      if (!params.has(key)) params.set(key, value)
-    }
-
-    const result = await fetchAdeApi(`/timetable/getLastFromResources?${params.toString()}`, authResult.session)
+    const requestedDate = String(req.query.date ?? new Date().toISOString().slice(0, 10))
+    const requestedResourceId = String(req.query.resourceId ?? '')
+    const timetable = await fetchPlanningTimetableFromRpc(entSession.jar, requestedDate, requestedResourceId, {
+      cacheScope: getPlanningCacheScope(entSession),
+    })
 
     setSessionCookie(res, entSession)
-    res.status(200).json({ authenticated: true, timetable: result.data, debug: { apiStatus: result.status, apiOk: result.ok, ...authResult } })
+    res.status(200).json({
+      authenticated: true,
+      timetable: {
+        source: 'planning.univ-rennes1.fr',
+        date: requestedDate,
+        resourceId: timetable.resourceId,
+        weekLabel: timetable.weekLabel,
+        resolvedWeek: timetable.resolvedWeek,
+        outOfRange: timetable.outOfRange,
+        dayLabels: timetable.dayLabels,
+        events: timetable.events,
+      },
+      debug: {
+        finalUrl: timetable.finalUrl,
+        planningIdentifier: timetable.planningIdentifier,
+        resourceId: timetable.resourceId,
+        currentResourceId: timetable.currentResourceId,
+        displayConfigurationId: timetable.displayConfigurationId,
+        weekIndex: timetable.weekIndex,
+        calendarWeekIndex: timetable.calendarWeekIndex,
+        requestedDateMatched: timetable.requestedDateMatched,
+        outOfRange: timetable.outOfRange,
+        cache: timetable.cache,
+      },
+    })
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
   }
 })
 
-// 11. ADE Global Alerts
+// 12. ADE Upcoming Courses
+app.post('/__ent_auth/ade/upcoming', async (req, res) => {
+  try {
+    const entSession = getSessionFromRequest(req)
+    if (!entSession) {
+      return res.status(200).json({
+        authenticated: false,
+        upcoming: null,
+      })
+    }
+
+    const requestedDate = typeof req.body?.date === 'string' && req.body.date.trim()
+      ? req.body.date.trim()
+      : new Date().toISOString().slice(0, 10)
+    const lookaheadDays = Math.max(
+      1,
+      Math.min(21, Number.parseInt(String(req.body?.lookaheadDays ?? '14'), 10) || 14),
+    )
+    const selection = req.body?.selection && typeof req.body.selection === 'object'
+      ? req.body.selection
+      : null
+    const resourceIds = getAdeSelectionResourceIds(selection)
+    const selectionLabels = getAdeSelectionLabels(selection)
+    const upcoming = await resolveAdeUpcoming(entSession.jar, entSession.credentials, {
+      date: requestedDate,
+      lookaheadDays,
+      resourceIds,
+      selectionLabels,
+      cacheScope: getPlanningCacheScope(entSession),
+    })
+
+    setSessionCookie(res, entSession)
+    res.status(200).json({
+      authenticated: true,
+      upcoming: {
+        source: upcoming.source,
+        date: requestedDate,
+        lookaheadDays,
+        complete: upcoming.complete,
+        resourceIds: upcoming.resourceIds,
+        selectionLabels: upcoming.selectionLabels,
+        events: upcoming.events,
+        nextEvent: upcoming.nextEvent,
+      },
+      debug: {
+        apiStatus: upcoming.apiStatus,
+        authMode: upcoming.authMode,
+        cache: upcoming.cache,
+        sessionCache: upcoming.sessionCache,
+        fallback: upcoming.fallback,
+      },
+    })
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
+  }
+})
+
+// 13. ADE Global Alerts
 app.get('/__ent_auth/ade/alerts', async (req, res) => {
   try {
     const entSession = getSessionFromRequest(req)
     if (!entSession) return res.status(200).json({ authenticated: false, alerts: null })
 
-    const authResult = await authenticateToAde(entSession.jar)
+    const authResult = await authenticateToAde(entSession.jar, entSession.credentials, {
+      cacheScope: getPlanningCacheScope(entSession),
+    })
     const etabsVets = req.query.etabsVets || ''
     const apiPath = etabsVets
       ? `/timetable/getADEGlobalAlerts?etabsVets=${encodeURIComponent(etabsVets)}`
@@ -1156,8 +2167,14 @@ app.get('/__ent_auth/ade/alerts', async (req, res) => {
   }
 })
 
-// 12. Logout Endpoint
+// 14. Logout Endpoint
 app.post('/__ent_auth/logout', (req, res) => {
+  const session = getSessionFromRequest(req)
+  if (session?.id) {
+    runtimeSessions.delete(session.id)
+    clearSensitiveSessionCaches(session)
+  }
+
   res.clearCookie(LOCAL_SESSION_COOKIE)
   res.status(200).json({
     authenticated: false,
@@ -1173,7 +2190,7 @@ app.use('/__ent_proxy', createProxyMiddleware({
   secure: true,
   pathRewrite: { '^/__ent_proxy': '' },
   on: {
-    proxyReq: (proxyReq, req, res) => {
+    proxyReq: (proxyReq, req) => {
       const manualCookie = req.headers['x-ent-cookie']
       if (typeof manualCookie === 'string' && manualCookie.trim()) {
         proxyReq.setHeader('cookie', manualCookie.trim())

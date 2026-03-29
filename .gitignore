@@ -10,7 +10,15 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+.claude/
+.env
+.env.*
 *.local
+cookies.txt
+ENT_API.md
+SECURITY_REVIEW.md
+ade_timetable_architecture_better.md
+API_GUIDE.md
 
 # Editor directories and files
 .vscode/*

@@ -3,6 +3,7 @@ import { Icon } from '@iconify/react'
 import AvailableApplications from './AvailableApplications'
 import WidgetAverageGrade from './WidgetAverageGrade'
 import WidgetLatestGrade from './WidgetLatestGrade'
+import WidgetNextClass from './WidgetNextClass'
 import {
   getCurrentLocationWeather,
   getEditableLocationLabel,
@@ -10,6 +11,7 @@ import {
 } from '../weatherApi'
 
 const WEATHER_CITY_KEY = 'l-ent:weather-city'
+const DEFAULT_WEATHER_CITY = 'Rennes'
 
 const INITIAL_WEATHER_STATE = {
   summary: 'Chargement météo...',
@@ -191,8 +193,10 @@ function WidgetContainer({
   userName = ' ',
   greeting,
   isSessionReady = true,
-  account = null,
   establishment = null,
+  selectedPlanningSelection = null,
+  debugNextClass = false,
+  canUseServerLaunch = true,
 }) {
   const displayName = userName?.trim() || ' '
   const greetingSubtitle = greeting ?? getGreetingSubtitle()
@@ -211,6 +215,11 @@ function WidgetContainer({
     try {
       const nextWeather = await getCurrentLocationWeather()
       setWeatherState(nextWeather)
+      const resolvedCity = getEditableLocationLabel(nextWeather.location)
+      if (resolvedCity) {
+        localStorage.setItem(WEATHER_CITY_KEY, resolvedCity)
+      }
+      return nextWeather
     } finally {
       setIsWeatherLoading(false)
     }
@@ -226,7 +235,7 @@ function WidgetContainer({
         const storedCity = localStorage.getItem(WEATHER_CITY_KEY)
         const nextWeather = storedCity
           ? await getWeatherForQuery(storedCity)
-          : await getCurrentLocationWeather()
+          : await getWeatherForQuery(DEFAULT_WEATHER_CITY)
 
         if (isMounted) {
           setWeatherState(nextWeather)
@@ -299,7 +308,6 @@ function WidgetContainer({
   const handleUseCurrentPosition = useCallback(async () => {
     try {
       setLocationError('')
-      localStorage.removeItem(WEATHER_CITY_KEY)
       await loadCurrentWeather()
       setIsLocationPickerOpen(false)
     } catch (error) {
@@ -334,7 +342,7 @@ function WidgetContainer({
 
   return (
     <section className="w-full grid gap-8 pt-6 px-10 pb-10 max-md:px-4 max-md:pt-4 max-md:pb-8 max-md:gap-6" aria-label="Widgets">
-      <div className="flex flex-wrap gap-5 items-stretch max-2xl:gap-[14px] max-md:gap-[10px]">
+      <div className="flex flex-wrap gap-5 items-stretch max-2xl:gap-[14px] max-md:gap-[10px] overflow-hidden p-2 -m-2">
         <article className={`widget-card shadow-md flex-[0_1_217px] min-h-[120px] p-5 border border-white rounded-[1.75rem] overflow-hidden bg-widget-bg text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-[min(280px,100%)] max-md:min-h-[108px] max-md:p-4 max-md:rounded-3xl max-xs:flex-[1_1_calc(50%-5px)] max-xs:min-w-0 flex flex-col justify-end gap-[3px] text-text ${areWidgetsVisible ? 'widget-card-visible delay-[80ms]' : ''}`}>
           <Icon icon="ph:hand-waving" className="greeting-icon w-10 h-10 text-inherit shrink-0 max-md:w-[34px] max-md:h-[34px]" aria-hidden="true" />
           <h2 className="m-0 leading-[1.06] text-2xl font-bold max-md:text-[22px]">Salut {displayName} !</h2>
@@ -367,15 +375,22 @@ function WidgetContainer({
           </div>
         </article>
 
+        {establishment === 'iutlan' || debugNextClass ? (
+          <WidgetNextClass
+            visible={areWidgetsVisible}
+            debug={debugNextClass}
+            selection={selectedPlanningSelection}
+          />
+        ) : null}
         {establishment === 'iutlan' ? (
-          <>
+          <div className="flex-[1_1_100%] min-w-0 flex items-stretch gap-5 max-2xl:gap-[14px] max-md:gap-[10px] 2xl:contents">
             <WidgetAverageGrade visible={areWidgetsVisible} />
             <WidgetLatestGrade visible={areWidgetsVisible} />
-          </>
+          </div>
         ) : null}
       </div>
 
-      <AvailableApplications establishment={establishment} />
+      <AvailableApplications establishment={establishment} canUseServerLaunch={canUseServerLaunch} />
 
       {isLocationPickerOpen ? (
         <div

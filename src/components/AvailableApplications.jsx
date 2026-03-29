@@ -79,7 +79,9 @@ function saveFavoritesOrder(favorites) {
   try {
     const keys = favorites.map(getApplicationKey)
     localStorage.setItem(FAVORITES_ORDER_KEY, JSON.stringify(keys))
-  } catch {}
+  } catch {
+    return
+  }
 }
 
 function applyStoredOrder(favorites) {
@@ -110,7 +112,9 @@ function loadLocalPins() {
 function saveLocalPins(pins) {
   try {
     localStorage.setItem(LOCAL_PINS_KEY, JSON.stringify(pins))
-  } catch {}
+  } catch {
+    return
+  }
 }
 
 function isLocalService(application) {
@@ -132,15 +136,11 @@ function toNavigableHref(value) {
     return ''
   }
 
-  if (/^[a-z][a-z\d+.-]*:/i.test(href) && !/^https?:/i.test(href)) {
+  if (/^[a-z][a-z\d+.-]*:/i.test(href)) {
     return href
   }
 
-  try {
-    return buildEntProxyHref(href)
-  } catch {
-    return `/__ent_auth/launch?url=${encodeURIComponent(href)}`
-  }
+  return buildEntProxyHref(href)
 }
 
 const LETTER_COLORS = [
@@ -539,6 +539,94 @@ function removeApplicationFromSections(sections, applicationKey) {
     .filter((section) => section.applications.length > 0)
 }
 
+function getUrlHostname(value) {
+  try {
+    return new URL(value).hostname
+  } catch {
+    return ''
+  }
+}
+
+function chainTouchesCas(chain = []) {
+  return chain.some((step) => {
+    const currentHost = getUrlHostname(step?.url)
+    const nextHost = getUrlHostname(step?.location)
+    return currentHost.includes('sso-cas') || nextHost.includes('sso-cas')
+  })
+}
+
+function shouldUseServerLaunchForTarget(href, launchDebug = null) {
+  if (!href) {
+    return false
+  }
+
+  if (href.startsWith('/__ent_proxy')) {
+    return true
+  }
+
+  const hrefHost = getUrlHostname(href)
+  if (hrefHost.includes('sso-cas')) {
+    return true
+  }
+
+  if (!launchDebug || launchDebug.degraded || launchDebug.saml) {
+    return false
+  }
+
+  const chain = Array.isArray(launchDebug.chain) ? launchDebug.chain : []
+  if (!chainTouchesCas(chain)) {
+    return false
+  }
+
+  return /[?&]ticket=ST-/i.test(String(launchDebug.finalUrl ?? ''))
+}
+
+async function resolveLaunchTarget(application) {
+  if (!application?.fname) {
+    return {
+      href: application?.href,
+      target: application?.target,
+    }
+  }
+
+  const fragmentResponse = await getPortletFragment({}, application.fname)
+  const launchLink = extractLaunchLink(fragmentResponse?.text ?? '')
+
+  return {
+    href: toNavigableHref(launchLink.href) || application.href,
+    target: getFirstText(launchLink.target, application.target),
+  }
+}
+
+async function resolveLaunchTargets(applications) {
+  const uniqueApplications = []
+  const seenKeys = new Set()
+
+  for (const application of applications) {
+    const applicationKey = getApplicationKey(application)
+
+    if (!application?.fname || seenKeys.has(applicationKey)) {
+      continue
+    }
+
+    seenKeys.add(applicationKey)
+    uniqueApplications.push([applicationKey, application])
+  }
+
+  const resolvedEntries = await Promise.all(uniqueApplications.map(async ([applicationKey, application]) => {
+    try {
+      return [applicationKey, await resolveLaunchTarget(application)]
+    } catch {
+      return [applicationKey, {
+        href: application.href,
+        target: application.target,
+      }]
+    }
+  }))
+
+  return Object.fromEntries(resolvedEntries)
+}
+
 
 function isPlainLeftClick(event) {
   return event.button === 0
@@ -548,13 +636,15 @@ function isPlainLeftClick(event) {
     && !event.altKey
 }
 
-function navigateToApplication({ href, target }, preparedWindow = null) {
+function navigateToApplication({ href, target }, preparedWindow = null, options = {}) {
+  const { useServerLaunch = true } = options
+
   if (!href) {
     return
   }
 
   let launchHref = href
-  if (target === '_blank') {
+  if (useServerLaunch) {
     if (href.startsWith('/__ent_proxy')) {
       const realUrl = ENT_ORIGIN + href.replace(/^\/__ent_proxy/, '')
       launchHref = `/__ent_auth/launch?url=${encodeURIComponent(realUrl)}`
@@ -582,6 +672,35 @@ function navigateToApplication({ href, target }, preparedWindow = null) {
   window.location.assign(launchHref)
 }
 
+async function copyTextToClipboard(text) {
+  const content = String(text ?? '')
+  if (!content) {
+    throw new Error("Impossible de copier un lien vide.")
+  }
+
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(content)
+    return
+  }
+
+  const fallbackInput = document.createElement('textarea')
+  fallbackInput.value = content
+  fallbackInput.setAttribute('readonly', '')
+  fallbackInput.style.position = 'fixed'
+  fallbackInput.style.opacity = '0'
+  fallbackInput.style.pointerEvents = 'none'
+  document.body.appendChild(fallbackInput)
+  fallbackInput.select()
+  fallbackInput.setSelectionRange(0, fallbackInput.value.length)
+
+  const didCopy = document.execCommand('copy')
+  document.body.removeChild(fallbackInput)
+
+  if (!didCopy) {
+    throw new Error("Impossible de copier le lien.")
+  }
+}
+
 function getContextMenuPosition(event) {
   const maxX = window.innerWidth - FAVORITES_CONTEXT_MENU_WIDTH - FAVORITES_CONTEXT_MENU_MARGIN
   const maxY = window.innerHeight - FAVORITES_CONTEXT_MENU_HEIGHT - FAVORITES_CONTEXT_MENU_MARGIN
@@ -596,7 +715,7 @@ function getContextMenuPosition(event) {
   }
 }
 
-function AvailableApplications({ establishment = null }) {
+function AvailableApplications({ establishment = null, canUseServerLaunch = true }) {
   const [viewState, setViewState] = useState({
     status: 'loading',
     source: 'none',
@@ -606,6 +725,7 @@ function AvailableApplications({ establishment = null }) {
   })
   const [reloadKey, setReloadKey] = useState(0)
   const [launchTargets, setLaunchTargets] = useState({})
+  const [launchBehaviors, setLaunchBehaviors] = useState({})
   const [launchingKeys, setLaunchingKeys] = useState({})
   const [exitingFavoriteKeys, setExitingFavoriteKeys] = useState({})
   const [favoriteActionState, setFavoriteActionState] = useState({
@@ -627,6 +747,7 @@ function AvailableApplications({ establishment = null }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const launchRequestsRef = useRef(new Map())
+  const launchBehaviorRequestsRef = useRef(new Map())
   const removalTimeoutsRef = useRef(new Map())
   const isMountedRef = useRef(true)
   const contextMenuRef = useRef(null)
@@ -671,11 +792,13 @@ function AvailableApplications({ establishment = null }) {
 
   useEffect(() => {
     const launchRequests = launchRequestsRef.current
+    const launchBehaviorRequests = launchBehaviorRequestsRef.current
     const removalTimeouts = removalTimeoutsRef.current
 
     return () => {
       isMountedRef.current = false
       launchRequests.clear()
+      launchBehaviorRequests.clear()
       for (const timeoutId of removalTimeouts.values()) {
         window.clearTimeout(timeoutId)
       }
@@ -774,9 +897,24 @@ function AvailableApplications({ establishment = null }) {
             description: 'Consulter ses notes et résultats',
             href: toNavigableHref('https://notes9.iutlan.univ-rennes1.fr/services/doAuth.php?href=https://notes9.iutlan.univ-rennes1.fr/'),
             target: '_blank',
+          }, {
+            id: 'lent-iutlan-loxya',
+            title: 'Loxya',
+            description: 'Location de matériel audiovisuel',
+            href: toNavigableHref('https://iut-lannion.loxya.app/external/login'),
+            target: '_blank',
           })
         }
 
+        const nextLaunchTargets = await resolveLaunchTargets([
+          ...getFavoriteApplications(sections.sections),
+          ...services,
+        ])
+        if (isCancelled) {
+          return
+        }
+
+        setLaunchTargets(nextLaunchTargets)
         setAllServices(services)
 
         if (sections.sections.length > 0) {
@@ -824,7 +962,7 @@ function AvailableApplications({ establishment = null }) {
     return () => {
       isCancelled = true
     }
-  }, [reloadKey])
+  }, [reloadKey, establishment])
 
   async function resolveApplicationLaunch(application) {
     const launchKey = getApplicationKey(application)
@@ -841,14 +979,8 @@ function AvailableApplications({ establishment = null }) {
       return existingRequest
     }
 
-    const request = getPortletFragment({}, application.fname)
-      .then((fragmentResponse) => {
-        const launchLink = extractLaunchLink(fragmentResponse?.text ?? '')
-        const resolvedLaunch = {
-          href: toNavigableHref(launchLink.href) || application.href,
-          target: getFirstText(launchLink.target, application.target),
-        }
-
+    const request = resolveLaunchTarget(application)
+      .then((resolvedLaunch) => {
         if (isMountedRef.current) {
           setLaunchTargets((current) => (
             current[launchKey]
@@ -868,6 +1000,66 @@ function AvailableApplications({ establishment = null }) {
       })
 
     launchRequestsRef.current.set(launchKey, request)
+    return request
+  }
+
+  async function resolveApplicationLaunchBehavior(application, launch = null) {
+    const launchKey = getApplicationKey(application)
+    const cachedBehavior = launchBehaviors[launchKey]
+    if (typeof cachedBehavior === 'boolean') {
+      return cachedBehavior
+    }
+
+    const existingRequest = launchBehaviorRequestsRef.current.get(launchKey)
+    if (existingRequest) {
+      return existingRequest
+    }
+
+    const resolvedLaunch = launch ?? await resolveApplicationLaunch(application)
+    const href = resolvedLaunch?.href || application?.href || ''
+    if (!/^https?:\/\//i.test(href)) {
+      const fallbackBehavior = shouldUseServerLaunchForTarget(href, null)
+
+      if (isMountedRef.current) {
+        setLaunchBehaviors((current) => (
+          launchKey in current
+            ? current
+            : { ...current, [launchKey]: fallbackBehavior }
+        ))
+      }
+
+      return fallbackBehavior
+    }
+
+    const request = fetch(`/__ent_auth/launch-preview?url=${encodeURIComponent(href)}`, {
+      credentials: 'same-origin',
+    })
+      .then(async (response) => {
+        const previewPayload = await response.json().catch(() => null)
+
+        if (typeof previewPayload?.useServerLaunch === 'boolean') {
+          return previewPayload.useServerLaunch
+        }
+
+        return shouldUseServerLaunchForTarget(href, previewPayload)
+      })
+      .catch(() => shouldUseServerLaunchForTarget(href, null))
+      .then((shouldUseServerLaunch) => {
+        if (isMountedRef.current) {
+          setLaunchBehaviors((current) => (
+            launchKey in current
+              ? current
+              : { ...current, [launchKey]: shouldUseServerLaunch }
+          ))
+        }
+
+        return shouldUseServerLaunch
+      })
+      .finally(() => {
+        launchBehaviorRequestsRef.current.delete(launchKey)
+      })
+
+    launchBehaviorRequestsRef.current.set(launchKey, request)
     return request
   }
 
@@ -1013,6 +1205,87 @@ function AvailableApplications({ establishment = null }) {
     if (dragRef.current.didDrag) {
       event.preventDefault()
       dragRef.current.didDrag = false
+    }
+  }
+
+  async function launchApplicationFromAction(application, options = {}) {
+    const launchKey = getApplicationKey(application)
+    const { targetOverride = null, preparedWindow = null } = options
+    const resolvedLaunch = launchTargets[launchKey]
+
+    if (launchingKeys[launchKey]) {
+      if (preparedWindow && !preparedWindow.closed) {
+        preparedWindow.close()
+      }
+      return
+    }
+
+    setLaunchingKeys((current) => ({ ...current, [launchKey]: true }))
+
+    try {
+      const nextLaunch = resolvedLaunch ?? await resolveApplicationLaunch(application)
+      const shouldUseServerLaunch = canUseServerLaunch
+        ? await resolveApplicationLaunchBehavior(application, nextLaunch)
+        : false
+      const effectiveLaunch = targetOverride
+        ? { ...nextLaunch, target: targetOverride }
+        : nextLaunch
+
+      clearLaunchingState(launchKey)
+      navigateToApplication(effectiveLaunch, preparedWindow, {
+        useServerLaunch: shouldUseServerLaunch,
+      })
+    } catch {
+      clearLaunchingState(launchKey)
+      if (preparedWindow && !preparedWindow.closed) {
+        preparedWindow.close()
+      }
+      navigateToApplication({
+        href: resolvedLaunch?.href || application.href,
+        target: targetOverride || resolvedLaunch?.target || application.target,
+      }, null, {
+        useServerLaunch: false,
+      })
+    } finally {
+      if (isMountedRef.current) {
+        clearLaunchingState(launchKey)
+      }
+    }
+  }
+
+  async function handleOpenApplicationInNewTab(application) {
+    setFavoriteActionState((current) => ({ ...current, error: '' }))
+    closeContextMenu()
+
+    const preparedWindow = window.open('about:blank', '_blank')
+    if (!preparedWindow) {
+      setFavoriteActionState((current) => ({
+        ...current,
+        error: "Impossible d'ouvrir un nouvel onglet pour le moment.",
+      }))
+      return
+    }
+
+    await launchApplicationFromAction(application, {
+      targetOverride: '_blank',
+      preparedWindow,
+    })
+  }
+
+  async function handleCopyApplicationLink(application) {
+    setFavoriteActionState((current) => ({ ...current, error: '' }))
+
+    try {
+      const nextLaunch = await resolveApplicationLaunch(application)
+      const href = nextLaunch?.href || application?.href || ''
+      await copyTextToClipboard(href)
+      closeContextMenu()
+    } catch (error) {
+      setFavoriteActionState((current) => ({
+        ...current,
+        error: getErrorMessage(error),
+      }))
+      closeContextMenu()
     }
   }
 
@@ -1165,43 +1438,19 @@ function AvailableApplications({ establishment = null }) {
   }
 
   async function handleApplicationClick(event, application) {
-    const launchKey = getApplicationKey(application)
-    const resolvedLaunch = launchTargets[launchKey]
-
-    if (resolvedLaunch || !application.fname || !isPlainLeftClick(event)) {
+    if (!application.fname || !isPlainLeftClick(event)) {
       return
     }
 
     event.preventDefault()
 
-    if (launchingKeys[launchKey]) {
-      return
-    }
-
-    const preparedWindow = application.target === '_blank'
+    const launchKey = getApplicationKey(application)
+    const resolvedLaunch = launchTargets[launchKey]
+    const preparedWindow = (resolvedLaunch?.target ?? application.target) === '_blank'
       ? window.open('about:blank', '_blank')
       : null
 
-    setLaunchingKeys((current) => ({ ...current, [launchKey]: true }))
-
-    try {
-      const nextLaunch = await resolveApplicationLaunch(application)
-      clearLaunchingState(launchKey)
-      navigateToApplication(nextLaunch, preparedWindow)
-    } catch {
-      clearLaunchingState(launchKey)
-      if (preparedWindow && !preparedWindow.closed) {
-        preparedWindow.close()
-      }
-      navigateToApplication({
-        href: application.href,
-        target: application.target,
-      })
-    } finally {
-      if (isMountedRef.current) {
-        clearLaunchingState(launchKey)
-      }
-    }
+    await launchApplicationFromAction(application, { preparedWindow })
   }
 
   function handleRetry() {
@@ -1424,7 +1673,7 @@ function AvailableApplications({ establishment = null }) {
         return (
         <div
           ref={contextMenuRef}
-          className="favorites-context-menu fixed z-60 min-w-[216px] p-[6px] border border-border rounded-[18px] bg-context-bg shadow-[0_18px_40px_var(--color-shadow)] backdrop-blur-[12px] animate-context-menu-in max-md:min-w-[200px]"
+          className="favorites-context-menu fixed z-60 min-w-[252px] p-[6px] border border-border rounded-[18px] bg-context-bg shadow-[0_18px_40px_var(--color-shadow)] backdrop-blur-[12px] animate-context-menu-in max-md:min-w-[220px]"
           role="menu"
           aria-label={`Actions pour ${targetApplication.title}`}
           style={{
@@ -1434,6 +1683,25 @@ function AvailableApplications({ establishment = null }) {
             '--favorites-context-origin-y': contextMenuState.originY,
           }}
         >
+          <button
+            type="button"
+            className="favorites-context-action w-full flex items-center gap-[10px] min-h-[44px] px-3 border-0 rounded-[12px] bg-transparent text-brand font-inherit text-[15px] font-semibold text-left animate-context-action-in hover:bg-context-hover focus-visible:bg-context-hover focus-visible:outline-none"
+            role="menuitem"
+            onClick={() => void handleOpenApplicationInNewTab(targetApplication)}
+          >
+            <Icon icon="carbon:launch" className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
+            <span>Ouvrir dans un nouvel onglet</span>
+          </button>
+          <button
+            type="button"
+            className="favorites-context-action w-full flex items-center gap-[10px] min-h-[44px] px-3 border-0 rounded-[12px] bg-transparent text-brand font-inherit text-[15px] font-semibold text-left animate-context-action-in hover:bg-context-hover focus-visible:bg-context-hover focus-visible:outline-none"
+            role="menuitem"
+            onClick={() => void handleCopyApplicationLink(targetApplication)}
+          >
+            <Icon icon="carbon:copy-link" className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
+            <span>Copier le lien</span>
+          </button>
+          <div className="mx-2 my-1 h-px bg-border/80" aria-hidden="true" />
           {isAddMode ? (
             <button
               type="button"

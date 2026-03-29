@@ -3,7 +3,7 @@ import lentLogoDark from '../assets/lentlogo-dark.svg'
 import { Icon } from '@iconify/react'
 import LentButton from './LentButton'
 
-function AppHeader({ authenticated, checking, onPrimaryAction, onRefreshedClick }) {
+function AppHeader({ authenticated, checking, onPrimaryAction, onAccountAction }) {
   const actionLabel = checking
     ? 'Chargement...'
     : authenticated
@@ -35,10 +35,8 @@ function AppHeader({ authenticated, checking, onPrimaryAction, onRefreshedClick 
 
               <button
                 type="button"
-                className="header-account-btn inline-flex items-center justify-center gap-2 px-3 py-[10px] border border-white rounded-full bg-widget-bg text-text text-[0.9rem] font-semibold leading-[1.06] whitespace-nowrap cursor-pointer transition-[background-color,opacity] duration-120 ease-in-out hover:not-disabled:bg-bg-subtle disabled:opacity-40 disabled:cursor-wait max-md:w-[42px] max-md:min-w-[42px] max-md:h-[42px] max-md:p-0 max-md:justify-center max-md:gap-0"
-                onClick={() => {
-                  window.location.assign('https://sesame.univ-rennes.fr/comptes/')
-                }}
+                className="header-account-btn inline-flex items-center justify-center gap-2 px-3 py-[10px] border border-white dark:border-[rgba(255,255,255,0.08)] rounded-full bg-widget-bg text-text text-[0.9rem] font-semibold leading-[1.06] whitespace-nowrap cursor-pointer transition-[background-color,opacity] duration-120 ease-in-out hover:not-disabled:bg-bg-subtle disabled:opacity-40 disabled:cursor-wait max-md:w-[42px] max-md:min-w-[42px] max-md:h-[42px] max-md:p-0 max-md:justify-center max-md:gap-0"
+                onClick={onAccountAction}
                 disabled={checking}
                 aria-label="Mon compte"
               >

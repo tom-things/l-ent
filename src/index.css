@@ -55,7 +55,7 @@
 
 @font-face {
   font-family: 'ABC Camera Plain';
-  src: url('./assets/fonts/ABCCameraPlainVariable-Trial.woff2') format('woff2');
+  src: url('./assets/fonts/ABCCameraPlainVariable.woff2') format('woff2');
   font-style: normal;
   font-weight: 100 900;
   font-display: swap;

@@ -1,80 +1,462 @@
-import iutlanLogo from '../assets/uni_logos/iutlan.svg'
-import iutsaibLogo from '../assets/uni_logos/iutsaib.svg'
-import iutsaiLogo from '../assets/uni_logos/iutsai.svg'
-import ufrsLogo from '../assets/uni_logos/ufrs.svg'
-import ufrmLogo from '../assets/uni_logos/ufrm.svg'
-import ufrpLogo from '../assets/uni_logos/ufrp.svg'
-import ufroLogo from '../assets/uni_logos/ufro.svg'
-import fdseLogo from '../assets/uni_logos/fdse.svg'
-import odsLogo from '../assets/uni_logos/ods.svg'
-import univRennesLogo from '../assets/uni_logos/univ-rennes.svg'
+import { useEffect, useState } from 'react'
 
-const ESTABLISHMENTS = [
-  { id: 'iutlan', name: 'IUT de Lannion', logo: iutlanLogo },
-  { id: 'iutsaib', name: 'IUT de Saint-Brieuc', logo: iutsaibLogo },
-  { id: 'iutsai', name: 'IUT de Saint-Malo', logo: iutsaiLogo },
-  { id: 'ufrs', name: 'UFR Sciences', logo: ufrsLogo },
-  { id: 'ufrm', name: 'UFR Médecine', logo: ufrmLogo },
-  { id: 'ufrp', name: 'UFR Pharmacie', logo: ufrpLogo },
-  { id: 'ufro', name: 'UFR Odontologie', logo: ufroLogo },
-  { id: 'fdse', name: 'Fac. Droit et Sc. politique', logo: fdseLogo },
-  { id: 'ods', name: 'OSUR', logo: odsLogo },
-  { id: 'other', name: 'Autre', logo: univRennesLogo },
-]
-
-export const ESTABLISHMENT_KEY = 'l-ent:establishment'
-
-export function getStoredEstablishment() {
-  try {
-    return localStorage.getItem(ESTABLISHMENT_KEY) || null
-  } catch {
-    return null
-  }
+const STEP_CONFIG = {
+  year: {
+    label: 'Année',
+    title: 'Choisis ton année',
+    description: "Commence par sélectionner ta promo ou ton année d'étude.",
+  },
+  td: {
+    label: 'TD',
+    title: 'Choisis ton groupe de TD',
+    description: 'On affine ensuite avec ton groupe de TD.',
+  },
+  tp: {
+    label: 'TP',
+    title: 'Choisis ton groupe de TP',
+    description: "Dernière étape : ton groupe de TP pour l'emploi du temps le plus précis.",
+  },
 }
 
-function OnboardingPage({ userName, onSelect }) {
-  function handleSelect(establishment) {
-    try {
-      localStorage.setItem(ESTABLISHMENT_KEY, establishment.id)
-    } catch {
-      // Storage unavailable
-    }
-    onSelect(establishment.id)
+const STEP_ORDER = ['year', 'td', 'tp']
+
+const TD_STEP_PALETTE = [
+  { background: '#d0fff8', text: '#132531', ring: 'rgba(19, 37, 49, 0.18)' },
+  { background: '#e6ffd0', text: '#182717', ring: 'rgba(24, 39, 23, 0.18)' },
+  { background: '#fbffd0', text: '#223018', ring: 'rgba(34, 48, 24, 0.18)' },
+  { background: '#ffd0f6', text: '#341829', ring: 'rgba(52, 24, 41, 0.18)' },
+  { background: '#ffd0d7', text: '#35221c', ring: 'rgba(53, 34, 28, 0.18)' },
+  { background: '#d0d5ff', text: '#231c3d', ring: 'rgba(35, 28, 61, 0.18)' },
+  { background: '#fffcd0', text: '#283218', ring: 'rgba(40, 50, 24, 0.18)' },
+]
+
+
+function OnboardingLoadingDots({ label = 'Chargement' }) {
+  return (
+    <span
+      className="inline-flex items-center justify-center gap-[6px] text-text-muted"
+      role="status"
+      aria-live="polite"
+      aria-label={label}
+    >
+      <span className="lent-button-dot h-[5px] w-[5px] rounded-full bg-current" style={{ animationDelay: '0ms' }} />
+      <span className="lent-button-dot h-[5px] w-[5px] rounded-full bg-current" style={{ animationDelay: '140ms' }} />
+      <span className="lent-button-dot h-[5px] w-[5px] rounded-full bg-current" style={{ animationDelay: '280ms' }} />
+    </span>
+  )
+}
+
+function buildTdOrbitText(stepOption, selectedYear, contextLabel) {
+  const parts = [
+    stepOption.label,
+    selectedYear?.label,
+    stepOption.parentLabel,
+    contextLabel,
+    'Travaux dirigés',
+  ].filter(Boolean)
+
+  const baseText = parts.join(' · ')
+  return Array.from({ length: 3 }, () => baseText).join(' · ')
+}
+
+function getGroupDisplayLabel(step, label) {
+  if (typeof label !== 'string') {
+    return step === 'tp' ? 'TP' : 'TD'
   }
 
-  return (
-    <section className="flex-1 flex items-center justify-center bg-bg p-8 min-h-0 max-sm:p-5" aria-label="Choix de l'établissement">
-      <div className="flex flex-col gap-8 w-full max-w-[800px]">
-        <div className="flex flex-col gap-3">
-          <h1 className="text-[3.5rem] font-bold leading-[0.9] text-text m-0 max-sm:text-[2.25rem]">
-            Hello, {userName || 'étudiant'}
-          </h1>
-          <p className="text-lg font-medium leading-[1.2] text-text-muted m-0 font-body max-sm:text-base">
-            Configurons ton ENT, sélectionne ton établissement affilié à l'université de Rennes
-          </p>
-        </div>
+  const prefix = step === 'tp' ? 'TP' : 'TD'
+  const normalizedLabel = label.trim().replace(/\s+/g, ' ')
+  const explicitGroupMatch = normalizedLabel.match(new RegExp(`\\b${prefix}\\s*([A-Z0-9]+)\\b`, 'i'))
 
-        <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-          {ESTABLISHMENTS.map((establishment, index) => (
-            <button
-              key={establishment.id}
-              type="button"
-              className="onboarding-card app-card-enter flex items-center gap-3 h-[88px] p-3 bg-widget-bg border border-white rounded-[22px] cursor-pointer text-left font-inherit transition-all duration-150 ease-in-out hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2 max-sm:h-[76px]"
-              style={{ animationDelay: `${index * 40}ms` }}
-              onClick={() => handleSelect(establishment)}
+  if (explicitGroupMatch) {
+    return `${prefix} ${explicitGroupMatch[1].toUpperCase()}`
+  }
+
+  if (step === 'td') {
+    const yearGroupMatch = normalizedLabel.match(/^\d+\s*([A-Z])\b/i)
+
+    if (yearGroupMatch) {
+      return `TD ${yearGroupMatch[1].toUpperCase()}`
+    }
+  }
+
+  if (step === 'tp') {
+    const tpPrefixMatch = normalizedLabel.match(/\bTP[\s-]*([A-Z0-9]+)\b/i)
+
+    if (tpPrefixMatch) {
+      return `TP ${tpPrefixMatch[1].toUpperCase()}`
+    }
+
+    const standaloneNumberMatch = normalizedLabel.match(/\b([0-9]+)\b/)
+
+    if (standaloneNumberMatch) {
+      return `TP ${standaloneNumberMatch[1]}`
+    }
+  }
+
+  const standaloneTokenMatch = normalizedLabel.match(/\b([A-Z])\b/i)
+
+  if (standaloneTokenMatch) {
+    return `${prefix} ${standaloneTokenMatch[1].toUpperCase()}`
+  }
+
+  return normalizedLabel
+}
+
+
+function OnboardingPage({
+  userName,
+  contextLabel = '',
+  currentStep = 'year',
+  stepOptions = [],
+  selectedYear = null,
+  selectedTd = null,
+  detectedResourceId = null,
+  errorMessage = '',
+  isLoading = false,
+  loadingMessage = '',
+  onRetry = null,
+  onBack = null,
+  onIgnore = null,
+  onSelect,
+  transitionDirection = 'initial',
+}) {
+  const currentStepConfig = STEP_CONFIG[currentStep] ?? STEP_CONFIG.year
+  const isTdStep = currentStep === 'td'
+  const isTpStep = currentStep === 'tp'
+  const isGroupCircleStep = isTdStep || isTpStep
+  const hasOptions = stepOptions.length > 0
+  const hasRetry = typeof onRetry === 'function'
+  const hasBack = typeof onBack === 'function' && (selectedYear || selectedTd)
+  const hasIgnore = typeof onIgnore === 'function'
+
+  const [tpLoadingTooLong, setTpLoadingTooLong] = useState(false)
+
+  useEffect(() => {
+    if (!isTpStep || !isLoading || hasOptions) {
+      setTpLoadingTooLong(false)
+      return undefined
+    }
+
+    const timerId = window.setTimeout(() => setTpLoadingTooLong(true), 3000)
+    return () => window.clearTimeout(timerId)
+  }, [isTpStep, isLoading, hasOptions])
+
+  const shouldShowTpStepActions = !isTpStep || hasOptions || Boolean(errorMessage) || tpLoadingTooLong
+
+  const specialStepTitle = isTdStep
+    ? 'Choisis ton TD pour commencer'
+    : (isTpStep ? 'Et enfin... ton groupe de TP' : '')
+  const specialStepCardStyle = isTpStep
+    ? {
+        '--td-card-bg': '#ffffff',
+        '--td-card-text': '#111827',
+        '--td-card-ring': 'rgba(17, 24, 39, 0.18)',
+      }
+    : null
+  const groupOptionButtons = stepOptions.map((stepOption, index) => {
+    const isDetected = detectedResourceId != null && String(detectedResourceId) === stepOption.resourceId
+    const tdPalette = TD_STEP_PALETTE[index % TD_STEP_PALETTE.length]
+    const orbitId = `td-orbit-${String(stepOption.resourceId).replace(/[^a-zA-Z0-9_-]/g, '-')}-${index}`
+
+    return (
+      <button
+        key={stepOption.resourceId}
+        type="button"
+        className={isGroupCircleStep
+          ? `onboarding-td-card onboarding-td-card-enter`
+          : 'onboarding-card app-card-enter flex min-h-[112px] flex-col items-start justify-between gap-4 rounded-[22px] border border-white bg-widget-bg p-4 text-left font-inherit transition-all duration-150 ease-in-out hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-60'}
+        style={isGroupCircleStep
+          ? {
+              '--td-card-bg': specialStepCardStyle?.['--td-card-bg'] ?? tdPalette.background,
+              '--td-card-text': specialStepCardStyle?.['--td-card-text'] ?? tdPalette.text,
+              '--td-card-ring': specialStepCardStyle?.['--td-card-ring'] ?? tdPalette.ring,
+              animationDelay: `${index * 40}ms`,
+            }
+          : { animationDelay: `${index * 40}ms` }}
+        onClick={() => onSelect(stepOption)}
+        disabled={isLoading}
+      >
+        {isGroupCircleStep ? (
+          <>
+            <svg
+              className="onboarding-td-card__orbit pointer-events-none absolute inset-0 size-full"
+              viewBox="0 0 220 220"
+              aria-hidden="true"
             >
-              <span className="flex items-center justify-center w-[62px] h-[62px] shrink-0 overflow-hidden max-sm:w-[50px] max-sm:h-[50px]">
-                <img
-                  src={establishment.logo}
-                  alt=""
-                  className="max-w-full max-h-full object-contain dark:invert"
+              <defs>
+                <path
+                  id={orbitId}
+                  d="M 110,110 m -82,0 a 82,82 0 1,1 164,0 a 82,82 0 1,1 -164,0"
                 />
+              </defs>
+              <text className="onboarding-td-card__orbit-text">
+                <textPath href={`#${orbitId}`} startOffset="0%">
+                  {buildTdOrbitText(stepOption, selectedYear, contextLabel)}
+                </textPath>
+              </text>
+            </svg>
+
+            {isDetected ? (
+              <span className="onboarding-td-card__badge">
+                ADE
               </span>
-              <span className="text-[1.1rem] font-semibold text-text leading-[1.1] max-sm:text-base">{establishment.name}</span>
-            </button>
-          ))}
-        </div>
+            ) : null}
+
+            <span className="onboarding-td-card__label">{getGroupDisplayLabel(currentStep, stepOption.label)}</span>
+          </>
+        ) : (
+          <>
+            <div className="flex w-full items-start justify-between gap-3">
+              <span className="text-[1.15rem] font-semibold leading-[1.1] text-text max-sm:text-base">{stepOption.label}</span>
+              {isDetected ? (
+                <span className="shrink-0 rounded-full bg-success-bg px-3 py-1 text-[0.75rem] font-semibold text-success-text">
+                  Détecté sur ADE
+                </span>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {stepOption.parentLabel ? (
+                <span className="rounded-full bg-bg px-3 py-1 text-xs font-semibold text-text-muted">
+                  {stepOption.parentLabel}
+                </span>
+              ) : null}
+              {stepOption.contextLabel && stepOption.contextLabel !== stepOption.parentLabel ? (
+                <span className="rounded-full bg-bg px-3 py-1 text-xs font-semibold text-text-muted">
+                  {stepOption.contextLabel}
+                </span>
+              ) : null}
+            </div>
+          </>
+        )}
+      </button>
+    )
+  })
+  const specialStepDesktopActions = isGroupCircleStep && hasIgnore && shouldShowTpStepActions ? (
+    <div className="flex flex-wrap items-center justify-center gap-3 max-sm:hidden">
+    {isTpStep && hasBack ? (
+        <button
+          type="button"
+          className="rounded-full border border-transparent bg-transparent px-4 py-2 text-sm font-medium text-text-muted transition-colors duration-150 hover:text-text focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2"
+          onClick={onBack}
+          disabled={isLoading}
+        >
+          Précédent
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className="rounded-full border border-transparent bg-transparent px-4 py-2 text-sm font-medium text-text-muted transition-colors duration-150 hover:text-text focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2"
+        onClick={onIgnore}
+        disabled={isLoading}
+      >
+        Ignorer
+      </button>
+    </div>
+  ) : null
+
+  return (
+    <section
+      className={`flex-1 flex items-center justify-center bg-bg min-h-0 ${
+        isGroupCircleStep
+          ? `px-8 py-10 max-sm:px-5 ${isTpStep ? 'max-sm:pt-8 max-sm:pb-32' : 'max-sm:py-8'}`
+          : 'p-8 max-sm:p-5'
+      }`}
+      aria-label={currentStepConfig.title}
+    >
+      <div
+        key={currentStep}
+        className={`onboarding-step-panel ${isTdStep ? 'onboarding-step-panel--td-intro' : ''} ${transitionDirection === 'back' ? 'onboarding-step-panel--back' : ''} flex w-full ${isGroupCircleStep ? 'max-w-[1040px] flex-col items-center gap-8' : 'max-w-[920px] flex-col gap-8'}`}
+      >
+        {isGroupCircleStep ? (
+          <>
+            <div className="flex w-full max-w-[920px] flex-col items-center gap-3">
+              <div className="flex w-full flex-wrap items-center justify-center gap-3">
+                {selectedYear ? (
+                  <span className="rounded-full border border-[color:var(--color-border)] bg-widget-bg px-4 py-2 text-sm font-semibold text-text shadow-[0_8px_20px_-16px_rgba(17,24,39,0.35)]">
+                    Année : {selectedYear.label}
+                  </span>
+                ) : null}
+                {isTpStep && selectedTd ? (
+                  <span className="rounded-full border border-[color:var(--color-border)] bg-widget-bg px-4 py-2 text-sm font-semibold text-text shadow-[0_8px_20px_-16px_rgba(17,24,39,0.35)]">
+                    TD : {selectedTd.label}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center gap-3 text-center">
+              <h1 className="m-0 text-[2.35rem] font-bold leading-[0.94] text-text max-sm:text-[1.95rem]">
+                {specialStepTitle}
+              </h1>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex flex-col gap-3">
+              <h1 className="text-[3.5rem] font-bold leading-[0.9] text-text m-0 max-sm:text-[2.25rem]">
+                Hello, {userName || 'étudiant'}
+              </h1>
+              <p className="text-lg font-medium leading-[1.2] text-text-muted m-0 font-body max-sm:text-base">
+                {contextLabel
+                  ? `On t'a retrouvé dans ${contextLabel}. On va maintenant descendre jusqu'à ton groupe exact.`
+                  : "On va maintenant descendre jusqu'à ton groupe exact pour afficher l'emploi du temps le plus précis."}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 max-sm:grid-cols-1">
+              {STEP_ORDER.map((stepKey, index) => {
+                const isCurrent = stepKey === currentStep
+                const isCompleted = (
+                  (stepKey === 'year' && selectedYear)
+                  || (stepKey === 'td' && selectedTd)
+                )
+
+                return (
+                  <div
+                    key={stepKey}
+                    className={`rounded-[22px] border p-4 transition-colors duration-300 ${isCurrent ? 'border-brand bg-widget-bg' : 'border-[color:var(--color-border)] bg-widget-bg'}`}
+                  >
+                    <p className="m-0 text-xs font-bold uppercase tracking-[0.08em] text-text-muted font-body">
+                      Étape {index + 1}
+                    </p>
+                    <p className="m-0 mt-2 text-base font-semibold text-text">{STEP_CONFIG[stepKey].label}</p>
+                    <p className="m-0 mt-2 text-sm text-text-muted font-body">
+                      {stepKey === 'year' && selectedYear ? selectedYear.label : null}
+                      {stepKey === 'td' && selectedTd ? selectedTd.label : null}
+                      {stepKey === 'tp' ? 'Groupe final' : null}
+                      {!isCompleted && !isCurrent ? 'À choisir' : null}
+                      {isCurrent ? 'En cours' : null}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {selectedYear ? (
+                <span className="rounded-full bg-widget-bg px-3 py-2 text-sm font-semibold text-text">
+                  Année : {selectedYear.label}
+                </span>
+              ) : null}
+              {selectedTd ? (
+                <span className="rounded-full bg-widget-bg px-3 py-2 text-sm font-semibold text-text">
+                  TD : {selectedTd.label}
+                </span>
+              ) : null}
+            </div>
+
+            <div className="flex items-start justify-between gap-4 max-sm:flex-col">
+              <div className="flex flex-col gap-2">
+                <h2 className="m-0 text-[1.7rem] font-bold text-text leading-tight">{currentStepConfig.title}</h2>
+                <p className="m-0 text-base text-text-muted font-body">{currentStepConfig.description}</p>
+              </div>
+      {isTpStep && hasBack ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center rounded-[14px] border border-[color:var(--color-border)] bg-bg px-4 py-3 text-sm font-semibold text-text transition-transform duration-150 ease-in-out hover:scale-[1.01] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2"
+                  onClick={onBack}
+                  disabled={isLoading}
+                >
+                  Retour
+                </button>
+              ) : null}
+            </div>
+          </>
+        )}
+
+        {errorMessage ? (
+          <div className={`rounded-[22px] border border-[color:var(--color-border)] bg-widget-bg p-5 ${isGroupCircleStep ? 'w-full max-w-[720px]' : ''}`}>
+            <p className="m-0 text-base font-semibold text-text">Impossible de récupérer ce niveau de groupe pour le moment.</p>
+            <p className="m-0 mt-2 text-sm text-text-muted font-body">{errorMessage}</p>
+            {hasRetry ? (
+              <button
+                type="button"
+                className="mt-4 inline-flex items-center justify-center rounded-[14px] border border-[color:var(--color-border)] bg-bg px-4 py-3 text-sm font-semibold text-text transition-transform duration-150 ease-in-out hover:scale-[1.01] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2"
+                onClick={onRetry}
+                disabled={isLoading}
+              >
+                Réessayer
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {isTpStep && !errorMessage ? (
+          <div className="flex w-full max-w-[920px] flex-col items-center gap-6">
+            <div className="w-full">
+              <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${isLoading ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                <div className="overflow-hidden">
+                  <div className="flex w-full items-center justify-center py-6">
+                    <OnboardingLoadingDots label={loadingMessage || 'Chargement en cours'} />
+                  </div>
+                </div>
+              </div>
+              <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${hasOptions ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                <div className={hasOptions ? 'overflow-visible' : 'overflow-hidden'}>
+                  <div className="-mb-7 -mt-5 -mx-5 px-5 pt-5 pb-7">
+                    <div key={hasOptions ? 'loaded' : 'empty'} className="flex w-full flex-wrap items-center justify-center gap-5 pt-1 max-sm:gap-4">
+                      {groupOptionButtons}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {specialStepDesktopActions}
+          </div>
+        ) : hasOptions ? (
+          <div className={isGroupCircleStep ? 'flex w-full max-w-[920px] flex-col items-center gap-6' : 'contents'}>
+            <div className={isGroupCircleStep ? 'flex w-full flex-wrap items-center justify-center gap-5 max-sm:gap-4' : 'grid grid-cols-2 gap-3 max-sm:grid-cols-1'}>
+              {groupOptionButtons}
+            </div>
+
+            {specialStepDesktopActions}
+          </div>
+        ) : errorMessage ? null : isTpStep && isLoading ? (
+          <div className="flex w-full max-w-[720px] items-center justify-center py-6">
+            <OnboardingLoadingDots label={loadingMessage || 'Chargement en cours'} />
+          </div>
+        ) : (
+          <div className={`rounded-[22px] border border-[color:var(--color-border)] bg-widget-bg p-5 ${isGroupCircleStep ? 'w-full max-w-[720px] text-center' : ''}`}>
+            <p className="m-0 text-base font-semibold text-text">Aucun choix n'a encore été trouvé pour cette étape.</p>
+            <div className="mt-3 min-h-[20px]">
+              {isLoading ? (
+                <OnboardingLoadingDots label={loadingMessage || 'Chargement en cours'} />
+              ) : (
+                <p className="m-0 text-sm text-text-muted font-body">Réessaie dans quelques instants.</p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
+
+      {isGroupCircleStep && hasIgnore && shouldShowTpStepActions ? (
+        <div className="fixed inset-x-0 bottom-0 z-20 hidden max-sm:flex justify-center px-5 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-4">
+          <div className="flex w-full max-w-[420px] items-center justify-center gap-3">
+            {hasBack ? (
+              <button
+                type="button"
+                className="min-h-[44px] flex-1 rounded-full border border-transparent bg-transparent px-4 py-2 text-sm font-medium text-text-muted transition-colors duration-150 hover:text-text focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2"
+                onClick={onBack}
+                disabled={isLoading}
+              >
+                Précédent
+              </button>
+            ) : null}
+            {hasIgnore ? (
+              <button
+                type="button"
+                className="min-h-[44px] flex-1 rounded-full border border-transparent bg-transparent px-4 py-2 text-sm font-medium text-text-muted transition-colors duration-150 hover:text-text focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2"
+                onClick={onIgnore}
+                disabled={isLoading}
+              >
+                Ignorer
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }

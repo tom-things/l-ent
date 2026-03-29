@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
 import lentLogoAlez from '../assets/login/lentlogo_alez.svg'
+import lentLogoAlezDark from '../assets/login/lentlogo_alez_dark.svg'
 import illustration from '../assets/login/illustration.webp'
 import universityRennesLogo from '../assets/uni_logos/univ-rennes.svg'
 import LentButton from './LentButton'
+import AboutModal from './AboutModal'
 
 function LoginPage({
   credentials,
@@ -13,6 +15,7 @@ function LoginPage({
   onSubmit,
 }) {
   const [showPassword, setShowPassword] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
   return (
     <section className="flex w-full min-h-screen bg-bg" aria-label="Login page">
       <div
@@ -39,12 +42,30 @@ function LoginPage({
         </div>
       </div>
 
+      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
+
       <div className="flex-[1_1_auto] min-w-0 min-h-screen relative flex justify-center items-stretch bg-bg max-4xl:w-full max-4xl:items-center max-md:justify-start">
+        <button
+          type="button"
+          className="absolute top-6 right-6 inline-flex h-[38px] w-[38px] items-center justify-center rounded-full border-0 bg-transparent text-text-muted transition-colors duration-120 hover:text-text max-3xl:top-5 max-3xl:right-5 max-md:top-4 max-md:right-4"
+          onClick={() => setAboutOpen(true)}
+          aria-label="À propos"
+        >
+          <Icon icon="carbon:information" className="h-[18px] w-[18px]" />
+        </button>
+
         <div className="w-[min(720px,100%)] min-h-screen flex flex-col gap-[25px] pt-[210px] px-[88px] pb-[120px] box-border max-4xl:w-[min(640px,100%)] max-4xl:min-h-auto max-4xl:gap-6 max-4xl:pt-14 max-4xl:px-10 max-4xl:pb-12 max-3xl:w-[min(600px,100%)] max-3xl:pt-10 max-3xl:px-8 max-3xl:pb-9 max-md:w-full max-md:pt-8 max-md:px-5 max-md:pb-6">
           <div className="hidden max-md:flex items-center gap-3 flex-wrap">
             <img
-              className="block w-[112px] h-[56px] object-contain max-md:block"
+              className="block w-[112px] h-[56px] object-contain max-md:block dark:hidden"
               src={lentLogoAlez}
+              alt="L'ent"
+              width="128"
+              height="64"
+            />
+            <img
+              className="hidden w-[112px] h-[56px] object-contain dark:block"
+              src={lentLogoAlezDark}
               alt="L'ent"
               width="128"
               height="64"

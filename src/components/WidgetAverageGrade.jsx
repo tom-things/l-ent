@@ -27,7 +27,7 @@ function WidgetAverageGrade({ visible = false }) {
 
   return (
     <article
-      className={`average-grade-widget widget-card shadow-md flex-[0_1_220px] min-h-[120px] p-5 border border-white rounded-[1.75rem] overflow-hidden bg-widget-bg text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-[min(280px,100%)] max-md:min-h-[108px] max-md:p-4 max-md:rounded-3xl max-xs:flex-[1_1_100%] max-xs:min-w-0 flex flex-col gap-[3px] text-text cursor-pointer relative ${visible ? 'widget-card-visible delay-[280ms]' : ''}`}
+      className={`average-grade-widget widget-card shadow-md flex-[0_1_220px] min-h-[120px] p-5 border border-white rounded-[1.75rem] overflow-hidden bg-widget-bg text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-0 max-md:min-h-[108px] max-md:p-4 max-md:rounded-3xl flex flex-col gap-[3px] text-text cursor-pointer relative ${visible ? 'widget-card-visible delay-[280ms]' : ''}`}
       aria-label="Moyenne générale"
       onClick={() => window.open(NOTES9_HREF, '_blank', 'noopener,noreferrer')}
       role="link"
