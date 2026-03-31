@@ -584,7 +584,7 @@ function WidgetNextClass({ visible = false, debug = false, selection = null }) {
 
   return (
     <article
-      className={`next-class-widget widget-card relative z-0 hover:z-10 shadow-md flex-[0_1_320px] min-h-[120px] p-5 border border-white rounded-[1.75rem] overflow-visible text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-[min(320px,100%)] max-2xl:min-h-[160px] max-md:min-h-[150px] max-md:p-4 max-md:rounded-3xl max-xs:flex-[1_1_100%] max-xs:min-w-0 flex flex-col gap-[7px] text-text cursor-pointer ${visible ? 'widget-card-visible delay-[80ms]' : ''}`}
+      className={`next-class-widget widget-card relative z-0 hover:z-10 shadow-md flex-[0_1_320px] h-[148px] p-5 border border-white rounded-[1.75rem] overflow-visible text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-[min(320px,100%)] max-md:h-[140px] max-md:p-4 max-md:rounded-3xl max-xs:flex-[1_1_100%] max-xs:min-w-0 flex flex-col gap-[6px] text-text cursor-pointer ${visible ? 'widget-card-visible delay-[80ms]' : ''}`}
       style={{ '--class-gradient': classGradient, '--class-gradient-dark': classGradientDark }}
       aria-label="Prochain cours, ouvrir ADE"
       onClick={openAdePlanning}
@@ -593,15 +593,15 @@ function WidgetNextClass({ visible = false, debug = false, selection = null }) {
       tabIndex={0}
     >
       <Icon icon="carbon:arrow-up-right" className="grade-corner-arrow absolute top-[14px] right-[14px] w-[14px] h-[14px] text-text opacity-0 transition-opacity duration-150 ease-in-out shrink-0" aria-hidden="true" />
-      <div className="flex items-center gap-[5px]">
+      <div className="flex items-center gap-[5px] min-w-0">
         <Icon icon="carbon:calendar" className="w-[17px] h-[17px] shrink-0 text-text" aria-hidden="true" />
-        <span className="m-0 leading-[1.06] text-base font-medium max-md:text-[15px]">Prochain cours</span>
+        <span className="m-0 min-w-0 leading-[1.06] text-base font-medium overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[15px]">Prochain cours</span>
       </div>
 
       <div className="flex-1 flex flex-col justify-between min-h-0">
         {widgetState.status === 'ready' && nextClass ? (
           <>
-            <div className="flex items-center gap-2 flex-1 my-3">
+            <div className="flex items-center gap-2 flex-1 min-h-0 my-1.5">
               <div className="flex self-stretch items-center">
                 <div
                   className="w-[6px] h-full rounded-[25px] shrink-0 relative overflow-hidden"
@@ -611,34 +611,34 @@ function WidgetNextClass({ visible = false, debug = false, selection = null }) {
                   <div className="absolute inset-0 rounded-[25px]" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.5) 0%, transparent 70%)' }} />
                 </div>
               </div>
-              <div className="flex flex-col gap-1 min-w-0 flex-1">
-                <span className="m-0 leading-[1.06] text-base font-bold max-md:text-[15px]">{nextClass.title}</span>
-                <div className="flex flex-wrap gap-x-[9px] gap-y-[2px] items-center">
+              <div className="flex flex-col justify-center gap-[3px] min-w-0 flex-1">
+                <span className="m-0 leading-[1.06] text-base font-bold overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[15px]" title={nextClass.title}>{nextClass.title}</span>
+                <div className="flex flex-col gap-[2px] min-w-0">
                   {nextClass.location ? (
-                    <span className="flex items-center gap-[3px] opacity-60">
+                    <span className="flex items-center gap-[3px] min-w-0 opacity-60">
                       <Icon icon="carbon:location" className="w-[17px] h-[17px] shrink-0" aria-hidden="true" />
-                      <span className="leading-[1.06] text-base max-md:text-[15px] whitespace-nowrap">{nextClass.location}</span>
+                      <span className="min-w-0 leading-[1.06] text-base overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[15px]" title={nextClass.location}>{nextClass.location}</span>
                     </span>
                   ) : null}
                   {nextClass.teacher ? (
-                    <span className="flex items-center gap-[3px] opacity-60">
+                    <span className="flex items-center gap-[3px] min-w-0 opacity-60">
                       <Icon icon="carbon:user-avatar" className="w-[17px] h-[17px] shrink-0" aria-hidden="true" />
-                      <span className="leading-[1.06] text-base max-md:text-[15px] whitespace-nowrap">{nextClass.teacher}</span>
+                      <span className="min-w-0 leading-[1.06] text-base overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[15px]" title={nextClass.teacher}>{nextClass.teacher}</span>
                     </span>
                   ) : null}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between gap-3 min-w-0">
               <div className="flex flex-col gap-[2px] min-w-0">
-                <div className="flex items-center gap-[7px] flex-wrap">
+                <div className="flex items-center gap-[7px] min-w-0">
                   <span
-                    className={`relative inline-flex items-center gap-[5px] ${shouldShowExactDateTooltip ? 'group/next-class cursor-help' : ''}`}
+                    className={`relative inline-flex min-w-0 items-center gap-[5px] ${shouldShowExactDateTooltip ? 'group/next-class cursor-help' : ''}`}
                     title={shouldShowExactDateTooltip ? exactDateLabel : undefined}
                   >
                     <Icon icon="carbon:time" className="w-[17px] h-[17px] shrink-0" aria-hidden="true" />
-                    <span className="leading-[1.06] text-base font-medium max-md:text-[15px] whitespace-nowrap">{timeLabel}</span>
+                    <span className="min-w-0 leading-[1.06] text-base font-medium overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[15px]">{timeLabel}</span>
                     {shouldShowExactDateTooltip ? (
                       <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 inline-flex -translate-x-1/2 translate-y-1 scale-95 whitespace-nowrap rounded-full border border-white/70 bg-[rgba(17,24,39,0.92)] px-3 py-1.5 text-[12px] font-medium leading-none text-white opacity-0 shadow-[0_12px_32px_rgba(17,24,39,0.18)] transition-[opacity,transform] duration-180 ease-out invisible group-hover/next-class:visible group-hover/next-class:translate-y-0 group-hover/next-class:scale-100 group-hover/next-class:opacity-100">
                         {exactDateLabel}
@@ -646,12 +646,12 @@ function WidgetNextClass({ visible = false, debug = false, selection = null }) {
                     ) : null}
                   </span>
                   {displayTimeRange ? (
-                    <span className="leading-[1.06] text-base opacity-60 max-md:text-[15px] whitespace-nowrap">{displayTimeRange}</span>
+                    <span className="min-w-0 leading-[1.06] text-base opacity-60 overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[15px]">{displayTimeRange}</span>
                   ) : null}
                 </div>
               </div>
               {firstGroup ? (
-                <span className="leading-[1.06] text-base font-semibold opacity-60 max-md:text-[15px] whitespace-nowrap">{firstGroup}</span>
+                <span className="leading-[1.06] text-base font-semibold opacity-60 shrink-0 max-w-[38%] overflow-hidden text-ellipsis whitespace-nowrap text-right max-md:text-[15px]" title={firstGroup}>{firstGroup}</span>
               ) : null}
             </div>
           </>

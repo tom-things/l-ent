@@ -391,6 +391,25 @@ function normalizeBootstrapSections(bootstrap) {
   }
 }
 
+const APP_CATEGORIES = [
+  { label: 'Scolarité', keywords: ['notes', 'dossier étudiant', 'apogée', 'contrat pédagogique', 'stages', 'évaluation orthographique', 'contrats étudiants'] },
+  { label: 'Communication', keywords: ['messagerie', 'annuaire', 'listes de diffusion', 'webconférence', 'webconference'] },
+  { label: 'Pédagogie', keywords: ['moodle', 'foad', 'mooc', 'modules auto-formatifs', 'création de modules', 'téléformation', 'klaxoon'] },
+  { label: 'Ressources', keywords: ['mediaserver', 'nudgis', 'ori-oai', 'portail des thèses', 'recherche documentaire', 'documentation des services', 'espaces de stockage', 'mise en ligne', 'loxya'] },
+  { label: 'Compte', keywords: ['sésame', 'sesame', 'compte informatique', 'mfa', 'authentification', 'crédits d\'impression'] },
+  { label: 'Outils', keywords: ['microsoft 365', 'esup signature', 'emplois du temps', 'assistance'] },
+]
+
+function getAppCategory(title = '') {
+  const t = title.trim().toLowerCase()
+  for (const { label, keywords } of APP_CATEGORIES) {
+    if (keywords.some((kw) => t.includes(kw))) {
+      return label
+    }
+  }
+  return null
+}
+
 function normalizeAllServices(bootstrap) {
   const layoutData = bootstrap?.layout?.data
   if (!isRecord(layoutData)) {
@@ -416,6 +435,11 @@ function normalizeAllServices(bootstrap) {
 
         if (!app) {
           continue
+        }
+
+        const category = getAppCategory(app.title)
+        if (category) {
+          app.category = category
         }
 
         const key = `${getApplicationKey(app)}-${app.href}`
@@ -715,7 +739,10 @@ function getContextMenuPosition(event) {
   }
 }
 
-function AvailableApplications({ establishment = null, canUseServerLaunch = true }) {
+function AvailableApplications({
+  establishment = null,
+  canUseServerLaunch = true,
+}) {
   const [viewState, setViewState] = useState({
     status: 'loading',
     source: 'none',
@@ -745,6 +772,7 @@ function AvailableApplications({ establishment = null, canUseServerLaunch = true
   const [localPins, setLocalPins] = useState(loadLocalPins)
   const [orderedFavorites, setOrderedFavorites] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState(null)
   const [isDragging, setIsDragging] = useState(false)
   const launchRequestsRef = useRef(new Map())
   const launchBehaviorRequestsRef = useRef(new Map())
@@ -768,11 +796,21 @@ function AvailableApplications({ establishment = null, canUseServerLaunch = true
       (service) => !isLocalService(service) || !pinnedLocalKeys.has(getApplicationKey(service)),
     )
   }, [allServices, localPins])
+  const categories = useMemo(() => {
+    const present = new Set(visibleServices.map((s) => s.category).filter(Boolean))
+    return APP_CATEGORIES.map((c) => c.label).filter((label) => present.has(label))
+  }, [visibleServices])
   const filteredServices = useMemo(() => {
-    if (!searchQuery.trim()) return visibleServices
-    const q = searchQuery.trim().toLowerCase()
-    return visibleServices.filter((s) => (s.title || s.name || '').toLowerCase().includes(q))
-  }, [visibleServices, searchQuery])
+    let services = visibleServices
+    if (selectedCategory) {
+      services = services.filter((s) => s.category === selectedCategory)
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase()
+      services = services.filter((s) => (s.title || s.name || '').toLowerCase().includes(q))
+    }
+    return services
+  }, [visibleServices, searchQuery, selectedCategory])
   const highlightedFavoriteKeys = useMemo(() => {
     if (!searchQuery.trim()) return new Set()
     const q = searchQuery.trim().toLowerCase()
@@ -1438,7 +1476,11 @@ function AvailableApplications({ establishment = null, canUseServerLaunch = true
   }
 
   async function handleApplicationClick(event, application) {
-    if (!application.fname || !isPlainLeftClick(event)) {
+    if (!isPlainLeftClick(event)) {
+      return
+    }
+
+    if (!application.fname) {
       return
     }
 
@@ -1591,6 +1633,27 @@ function AvailableApplications({ establishment = null, canUseServerLaunch = true
               />
             </div>
           </div>
+          {categories.length > 1 ? (
+            <div className="flex items-center gap-2 flex-wrap max-md:flex-nowrap max-md:overflow-x-auto max-md:-mx-4 max-md:px-4 favorites-scroll-hide">
+              <button
+                type="button"
+                className={`min-h-[34px] px-[14px] border rounded-full font-inherit text-sm font-semibold transition-[background-color,border-color,color] duration-[120ms] ${selectedCategory === null ? 'border-brand bg-brand text-white' : 'border-border bg-bg text-brand hover:bg-bg-subtle'}`}
+                onClick={() => setSelectedCategory(null)}
+              >
+                Tout
+              </button>
+              {categories.map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  className={`min-h-[34px] px-[14px] border rounded-full font-inherit text-sm font-semibold whitespace-nowrap transition-[background-color,border-color,color] duration-[120ms] ${selectedCategory === category ? 'border-brand bg-brand text-white' : 'border-border bg-bg text-brand hover:bg-bg-subtle'}`}
+                  onClick={() => setSelectedCategory(category)}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <div className="grid grid-cols-3 gap-x-6 max-lg:grid-cols-2 max-md:grid-cols-1">
             {filteredServices.map((service, index) => {
               const applicationKey = getApplicationKey(service)

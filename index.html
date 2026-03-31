@@ -71,10 +71,18 @@
         ]
       }
     </script>
+    <!-- 100% privacy-first analytics -->
+    <script async src="https://scripts.simpleanalyticscdn.com/latest.js"></script>
 
     <style>
       :root {
         color-scheme: light dark;
+      }
+
+      html,
+      body,
+      #root {
+        min-height: 100%;
       }
 
       body {
@@ -84,129 +92,21 @@
         color: #1f140f;
       }
 
-      #seo-shell {
-        min-height: 100vh;
-        padding: clamp(24px, 4vw, 56px);
-        display: grid;
-        place-items: center;
-        background:
-          radial-gradient(circle at top left, rgba(248, 255, 161, 0.9), transparent 34%),
-          radial-gradient(circle at top right, rgba(172, 246, 0, 0.18), transparent 32%),
-          linear-gradient(180deg, #fcfbf8 0%, #f5f3ed 100%);
-      }
-
-      .seo-card {
-        width: min(760px, 100%);
-        box-sizing: border-box;
-        padding: clamp(24px, 5vw, 48px);
-        border-radius: 32px;
-        background: rgba(255, 255, 255, 0.86);
-        box-shadow: 0 24px 60px rgba(52, 18, 0, 0.12);
-        backdrop-filter: blur(14px);
-      }
-
-      .seo-kicker {
-        margin: 0 0 14px;
-        font-size: 0.9rem;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: #7b4f2b;
-      }
-
-      .seo-card h1 {
-        margin: 0;
-        font-size: clamp(2.2rem, 5vw, 4rem);
-        line-height: 0.95;
-      }
-
-      .seo-card p {
-        margin: 18px 0 0;
-        font-size: 1.05rem;
-        line-height: 1.6;
-        color: #533826;
-      }
-
-      .seo-features {
-        margin: 24px 0 0;
-        padding-left: 1.25rem;
-        display: grid;
-        gap: 10px;
-        color: #341200;
-      }
-
-      .seo-note {
-        margin-top: 24px;
-        padding: 16px 18px;
-        border-radius: 18px;
-        background: rgba(172, 246, 0, 0.14);
-      }
-
-      .seo-link {
-        color: inherit;
-        font-weight: 700;
-      }
-
       @media (prefers-color-scheme: dark) {
         body {
           background: #0f0f0f;
           color: #f3ede8;
         }
-
-        #seo-shell {
-          background:
-            radial-gradient(circle at top left, rgba(248, 255, 161, 0.16), transparent 34%),
-            radial-gradient(circle at top right, rgba(172, 246, 0, 0.08), transparent 32%),
-            linear-gradient(180deg, #171311 0%, #0f0f0f 100%);
-        }
-
-        .seo-card {
-          background: rgba(24, 18, 14, 0.92);
-          box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
-        }
-
-        .seo-kicker {
-          color: #c4f76d;
-        }
-
-        .seo-card p {
-          color: #dbc6b8;
-        }
-
-        .seo-features {
-          color: #f3ede8;
-        }
-
-        .seo-note {
-          background: rgba(172, 246, 0, 0.12);
-        }
       }
     </style>
   </head>
   <body>
-    <div id="root">
-      <main id="seo-shell">
-        <section class="seo-card" aria-labelledby="seo-title">
-          <p class="seo-kicker">Client alternatif non officiel</p>
-          <h1 id="seo-title">Toute ta fac, au même endroit.</h1>
-          <p>
-            l'ent simplifie l'accès à l'ENT de l'Université de Rennes avec une interface unique
-            pour retrouver les notes, l'emploi du temps ADE, les résultats et les services
-            universitaires importants.
-          </p>
-          <ul class="seo-features">
-            <li>Connexion avec les identifiants ENT de l'Université de Rennes</li>
-            <li>Tableau de bord unique pour notes, planning, messagerie et services</li>
-            <li>Application web installable sur mobile et ordinateur</li>
-            <li>Projet open source indépendant, pensé pour une consultation plus lisible</li>
-          </ul>
-          <p class="seo-note">
-            JavaScript est nécessaire pour la connexion complète à l'application.
-            <a class="seo-link" href="https://github.com/tom-things/l-ent">Voir le projet sur GitHub</a>.
-          </p>
-        </section>
-      </main>
-    </div>
+    <div id="root"></div>
+    <noscript>
+      <p style="margin:0;padding:24px;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+        JavaScript est nécessaire pour utiliser l&apos;application.
+      </p>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
