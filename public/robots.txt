@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+Disallow: /__ent_auth/
+Disallow: /__ent_proxy/

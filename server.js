@@ -70,6 +70,15 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+function getPublicOrigin(req) {
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim()
+  const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim()
+  const protocol = forwardedProto || req.protocol || 'http'
+  const host = forwardedHost || req.get('host') || `localhost:${PORT}`
+
+  return `${protocol}://${host}`
+}
+
 // Cookie Jar for session handling
 class CookieJar {
   constructor() {
@@ -1574,6 +1583,14 @@ const {
 app.use(cookieParser())
 app.use(express.json()) // Automatically parse incoming JSON requests for auth endpoints
 
+app.use((req, res, next) => {
+  if (req.path.startsWith('/__ent_auth') || req.path.startsWith('/__ent_proxy')) {
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive')
+  }
+
+  next()
+})
+
 // 1. Auth Status Endpoint
 app.get('/__ent_auth/session', async (req, res) => {
   try {
@@ -2613,13 +2630,48 @@ app.use('/__ent_proxy', createProxyMiddleware({
 // ============================================================================
 // STATIC FILE SERVING (REACT FRONTEND)
 // ============================================================================
+app.get('/robots.txt', (req, res) => {
+  const origin = getPublicOrigin(req)
+
+  res.type('text/plain')
+  res.send([
+    'User-agent: *',
+    'Allow: /',
+    'Disallow: /__ent_auth/',
+    'Disallow: /__ent_proxy/',
+    `Sitemap: ${origin}/sitemap.xml`,
+  ].join('\n'))
+})
+
+app.get('/sitemap.xml', (req, res) => {
+  const origin = getPublicOrigin(req)
+
+  res.type('application/xml')
+  res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${origin}/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>`)
+})
+
+function sendAppShell(req, res) {
+  const canonicalUrl = new URL('/', getPublicOrigin(req)).toString()
+
+  res.setHeader('Content-Language', 'fr')
+  res.setHeader('Link', `<${canonicalUrl}>; rel="canonical"`)
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'))
+}
+
+app.get('/', sendAppShell)
+
 // Serve the built static files
 app.use(express.static(path.join(__dirname, 'dist')))
 
 // Support for client-side routing (React Router)
-app.get(/^.*$/, (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'))
-})
+app.get(/^.*$/, sendAppShell)
 
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`)

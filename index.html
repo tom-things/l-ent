@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
@@ -7,39 +7,206 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FCFBF8" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f0f0f" />
+    <meta name="application-name" content="l'ent" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <title>l'ent</title>
+    <meta name="apple-mobile-web-app-title" content="l'ent" />
+    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+    <meta name="googlebot" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+    <title>l'ent | Client alternatif ENT Université de Rennes</title>
 
     <!-- Primary Meta Tags -->
-    <meta name="title" content="l'ent — Toute ta fac, au même endroit." />
+    <meta name="title" content="l'ent | Client alternatif ENT Université de Rennes" />
     <meta
       name="description"
-      content="l'ent réunit toutes vos données universitaires — cours, résultats, messagerie dans une interface lisible, rapide et agréable à utiliser."
+      content="Client alternatif non officiel à l'ENT de l'Université de Rennes pour consulter notes, emploi du temps ADE, résultats et services universitaires depuis une interface plus lisible."
     />
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:site_name" content="l'ent" />
     <meta property="og:url" content="/" />
-    <meta property="og:title" content="l'ent" />
+    <meta property="og:title" content="l'ent | Client alternatif ENT Université de Rennes" />
     <meta
       property="og:description"
-      content="l'ent réunit toutes vos données universitaires — cours, résultats, messagerie dans une interface lisible, rapide et agréable à utiliser."
+      content="Client alternatif non officiel à l'ENT de l'Université de Rennes pour consulter notes, emploi du temps ADE, résultats et services universitaires depuis une interface plus lisible."
     />
     <meta property="og:image" content="/og-image.png" />
+    <meta property="og:image:alt" content="Aperçu de l'application l'ent" />
 
     <!-- Twitter -->
-    <meta property="twitter:card" content="summary_large_image" />
-    <meta property="twitter:url" content="/" />
-    <meta property="twitter:title" content="l'ent" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="/" />
+    <meta name="twitter:title" content="l'ent | Client alternatif ENT Université de Rennes" />
     <meta
-      property="twitter:description"
-      content="l'ent réunit toutes vos données universitaires — cours, résultats, messagerie dans une interface lisible, rapide et agréable à utiliser."
+      name="twitter:description"
+      content="Client alternatif non officiel à l'ENT de l'Université de Rennes pour consulter notes, emploi du temps ADE, résultats et services universitaires depuis une interface plus lisible."
     />
-    <meta property="twitter:image" content="/og-image.png" />
+    <meta name="twitter:image" content="/og-image.png" />
+    <meta name="twitter:image:alt" content="Aperçu de l'application l'ent" />
+
+    <script type="application/ld+json" id="seo-structured-data">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "l'ent",
+        "headline": "l'ent | Client alternatif ENT Université de Rennes",
+        "description": "Client alternatif non officiel à l'ENT de l'Université de Rennes pour consulter notes, emploi du temps ADE, résultats et services universitaires depuis une interface plus lisible.",
+        "applicationCategory": "EducationApplication",
+        "operatingSystem": "Any",
+        "inLanguage": "fr-FR",
+        "isAccessibleForFree": true,
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "EUR"
+        },
+        "sameAs": ["https://github.com/tom-things/l-ent"],
+        "featureList": [
+          "Consulter ses notes et résultats",
+          "Retrouver son emploi du temps ADE",
+          "Accéder aux services universitaires depuis une interface unique",
+          "Installer l'application en PWA sur mobile et ordinateur"
+        ]
+      }
+    </script>
+
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+
+      body {
+        margin: 0;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f5f3ed;
+        color: #1f140f;
+      }
+
+      #seo-shell {
+        min-height: 100vh;
+        padding: clamp(24px, 4vw, 56px);
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at top left, rgba(248, 255, 161, 0.9), transparent 34%),
+          radial-gradient(circle at top right, rgba(172, 246, 0, 0.18), transparent 32%),
+          linear-gradient(180deg, #fcfbf8 0%, #f5f3ed 100%);
+      }
+
+      .seo-card {
+        width: min(760px, 100%);
+        box-sizing: border-box;
+        padding: clamp(24px, 5vw, 48px);
+        border-radius: 32px;
+        background: rgba(255, 255, 255, 0.86);
+        box-shadow: 0 24px 60px rgba(52, 18, 0, 0.12);
+        backdrop-filter: blur(14px);
+      }
+
+      .seo-kicker {
+        margin: 0 0 14px;
+        font-size: 0.9rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #7b4f2b;
+      }
+
+      .seo-card h1 {
+        margin: 0;
+        font-size: clamp(2.2rem, 5vw, 4rem);
+        line-height: 0.95;
+      }
+
+      .seo-card p {
+        margin: 18px 0 0;
+        font-size: 1.05rem;
+        line-height: 1.6;
+        color: #533826;
+      }
+
+      .seo-features {
+        margin: 24px 0 0;
+        padding-left: 1.25rem;
+        display: grid;
+        gap: 10px;
+        color: #341200;
+      }
+
+      .seo-note {
+        margin-top: 24px;
+        padding: 16px 18px;
+        border-radius: 18px;
+        background: rgba(172, 246, 0, 0.14);
+      }
+
+      .seo-link {
+        color: inherit;
+        font-weight: 700;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #0f0f0f;
+          color: #f3ede8;
+        }
+
+        #seo-shell {
+          background:
+            radial-gradient(circle at top left, rgba(248, 255, 161, 0.16), transparent 34%),
+            radial-gradient(circle at top right, rgba(172, 246, 0, 0.08), transparent 32%),
+            linear-gradient(180deg, #171311 0%, #0f0f0f 100%);
+        }
+
+        .seo-card {
+          background: rgba(24, 18, 14, 0.92);
+          box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+        }
+
+        .seo-kicker {
+          color: #c4f76d;
+        }
+
+        .seo-card p {
+          color: #dbc6b8;
+        }
+
+        .seo-features {
+          color: #f3ede8;
+        }
+
+        .seo-note {
+          background: rgba(172, 246, 0, 0.12);
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main id="seo-shell">
+        <section class="seo-card" aria-labelledby="seo-title">
+          <p class="seo-kicker">Client alternatif non officiel</p>
+          <h1 id="seo-title">Toute ta fac, au même endroit.</h1>
+          <p>
+            l'ent simplifie l'accès à l'ENT de l'Université de Rennes avec une interface unique
+            pour retrouver les notes, l'emploi du temps ADE, les résultats et les services
+            universitaires importants.
+          </p>
+          <ul class="seo-features">
+            <li>Connexion avec les identifiants ENT de l'Université de Rennes</li>
+            <li>Tableau de bord unique pour notes, planning, messagerie et services</li>
+            <li>Application web installable sur mobile et ordinateur</li>
+            <li>Projet open source indépendant, pensé pour une consultation plus lisible</li>
+          </ul>
+          <p class="seo-note">
+            JavaScript est nécessaire pour la connexion complète à l'application.
+            <a class="seo-link" href="https://github.com/tom-things/l-ent">Voir le projet sur GitHub</a>.
+          </p>
+        </section>
+      </main>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

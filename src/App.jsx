@@ -11,6 +11,7 @@ import PwaInstallPrompt from './components/PwaInstallPrompt'
 import OnboardingPage from './components/OnboardingPage'
 import PwaUpdateManager from './components/PwaUpdateManager'
 import { DEMO_CREDENTIALS } from './demoAccount'
+import { syncRuntimeSeo } from './seo'
 import {
   ESTABLISHMENT_KEY,
   STUDENT_TP_KEY,
@@ -47,7 +48,6 @@ import {
 } from './entApi'
 
 const DEFAULT_REQUEST_PATH = '/api/v4-3/dlm/layout.json'
-const BASE_DOCUMENT_TITLE = "l'ent - Toute ta fac, au même endroit."
 const DEBUG_MENU_ENABLED = import.meta.env.DEV
 const ACCOUNT_MODAL_NOTES9_TIMEOUT_MS = 3000
 const ONBOARDING_COMPLETION_SCREEN_MS = 1000
@@ -1056,9 +1056,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    document.title = sessionState.authenticated
-      ? BASE_DOCUMENT_TITLE
-      : `${BASE_DOCUMENT_TITLE} - Connexion`
+    syncRuntimeSeo({ authenticated: sessionState.authenticated })
   }, [sessionState.authenticated])
 
   useEffect(() => {
