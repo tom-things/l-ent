@@ -1637,7 +1637,7 @@ function AvailableApplications({
             <div className="flex items-center gap-2 flex-wrap max-md:flex-nowrap max-md:overflow-x-auto max-md:-mx-4 max-md:px-4 favorites-scroll-hide">
               <button
                 type="button"
-                className={`min-h-[34px] px-[14px] border rounded-full font-inherit text-sm font-semibold transition-[background-color,border-color,color] duration-[120ms] ${selectedCategory === null ? 'border-brand bg-brand text-white' : 'border-border bg-bg text-brand hover:bg-bg-subtle'}`}
+                className={`min-h-[34px] px-[14px] border rounded-full font-inherit text-sm font-semibold transition-[background-color,border-color,color] duration-[120ms] ${selectedCategory === null ? 'border-brand bg-brand text-bg' : 'border-border bg-bg text-brand hover:bg-bg-subtle'}`}
                 onClick={() => setSelectedCategory(null)}
               >
                 Tout
@@ -1646,7 +1646,7 @@ function AvailableApplications({
                 <button
                   key={category}
                   type="button"
-                  className={`min-h-[34px] px-[14px] border rounded-full font-inherit text-sm font-semibold whitespace-nowrap transition-[background-color,border-color,color] duration-[120ms] ${selectedCategory === category ? 'border-brand bg-brand text-white' : 'border-border bg-bg text-brand hover:bg-bg-subtle'}`}
+                  className={`min-h-[34px] px-[14px] border rounded-full font-inherit text-sm font-semibold whitespace-nowrap transition-[background-color,border-color,color] duration-[120ms] ${selectedCategory === category ? 'border-brand bg-brand text-bg' : 'border-border bg-bg text-brand hover:bg-bg-subtle'}`}
                   onClick={() => setSelectedCategory(category)}
                 >
                   {category}
