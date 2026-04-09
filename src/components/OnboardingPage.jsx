@@ -115,6 +115,9 @@ function OnboardingPage({
   errorMessage = '',
   isLoading = false,
   loadingMessage = '',
+  emptyStateTitle = '',
+  emptyStateBody = '',
+  emptyStateActionLabel = '',
   onRetry = null,
   onBack = null,
   onIgnore = null,
@@ -419,10 +422,24 @@ function OnboardingPage({
           </div>
         ) : (
           <div className={`rounded-[22px] border border-[color:var(--color-border)] bg-widget-bg p-5 ${isGroupCircleStep ? 'w-full max-w-[720px] text-center' : ''}`}>
-            <p className="m-0 text-base font-semibold text-text">Aucun choix n'a encore été trouvé pour cette étape.</p>
+            <p className="m-0 text-base font-semibold text-text">{emptyStateTitle || "Aucun choix n'a encore été trouvé pour cette étape."}</p>
             <div className="mt-3 min-h-[20px]">
               {isLoading ? (
                 <OnboardingLoadingDots label={loadingMessage || 'Chargement en cours'} />
+              ) : emptyStateBody ? (
+                <div className="flex flex-col items-center gap-4">
+                  <p className="m-0 text-sm text-text-muted font-body">{emptyStateBody}</p>
+                  {hasRetry ? (
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center rounded-[14px] border border-[color:var(--color-border)] bg-bg px-4 py-3 text-sm font-semibold text-text transition-transform duration-150 ease-in-out hover:scale-[1.01] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2"
+                      onClick={onRetry}
+                      disabled={isLoading}
+                    >
+                      {emptyStateActionLabel || 'Réessayer'}
+                    </button>
+                  ) : null}
+                </div>
               ) : (
                 <p className="m-0 text-sm text-text-muted font-body">Réessaie dans quelques instants.</p>
               )}

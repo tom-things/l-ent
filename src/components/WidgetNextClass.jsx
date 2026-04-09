@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '@iconify/react'
-import { ENT_AUTH_PREFIX, getAdeUpcoming } from '../entApi'
+import { ENT_AUTH_PREFIX, getAdeUpcoming, getRecentEntLoginAgeMs } from '../entApi'
 
 const CLASS_COLORS_KEY = 'l-ent:class-colors'
+const NEXT_CLASS_CACHE_KEY = 'l-ent:next-class-cache'
+const NEXT_CLASS_CACHE_TTL_MS = 48 * 60 * 60 * 1000
 const NEXT_CLASS_LOOKAHEAD_DAYS = 14
 const NEXT_CLASS_TICK_MS = 30 * 1000
 const NEXT_CLASS_REFRESH_MS = 5 * 60 * 1000
+const NEXT_CLASS_LOGIN_QUIET_MS = 90 * 1000
 const ADE_DOAUTH = 'https://planning.univ-rennes1.fr/direct/myplanning.jsp'
 const ADE_HREF = `${ENT_AUTH_PREFIX}/launch?url=${encodeURIComponent(ADE_DOAUTH)}`
 
@@ -53,6 +56,68 @@ function getEventKey(event) {
   ].join('||')
 }
 
+function buildNextClassCacheEntryKey(sessionUser, resourceKey) {
+  const normalizedUser = String(sessionUser ?? '').trim()
+  const normalizedResourceKey = String(resourceKey ?? '').trim()
+
+  if (!normalizedUser || !normalizedResourceKey) {
+    return ''
+  }
+
+  return `${normalizedUser}::${normalizedResourceKey}`
+}
+
+function readCachedNextClass(cacheKey) {
+  if (!cacheKey) {
+    return null
+  }
+
+  try {
+    const rawValue = localStorage.getItem(NEXT_CLASS_CACHE_KEY)
+    if (!rawValue) {
+      return null
+    }
+
+    const parsedValue = JSON.parse(rawValue)
+    if (!parsedValue || typeof parsedValue !== 'object') {
+      return null
+    }
+
+    if (parsedValue.cacheKey !== cacheKey || !Array.isArray(parsedValue.events)) {
+      return null
+    }
+
+    if (Date.now() - Number(parsedValue.cachedAt ?? 0) > NEXT_CLASS_CACHE_TTL_MS) {
+      return null
+    }
+
+    return {
+      events: parsedValue.events.map(decorateUpcomingEvent).filter(Boolean).sort(compareEvents),
+      complete: parsedValue.complete !== false,
+      cachedAt: Number(parsedValue.cachedAt ?? 0),
+    }
+  } catch {
+    return null
+  }
+}
+
+function persistCachedNextClass(cacheKey, result) {
+  if (!cacheKey || !Array.isArray(result?.events)) {
+    return
+  }
+
+  try {
+    localStorage.setItem(NEXT_CLASS_CACHE_KEY, JSON.stringify({
+      cacheKey,
+      complete: result.complete !== false,
+      events: result.events,
+      cachedAt: Date.now(),
+    }))
+  } catch {
+    // Storage unavailable
+  }
+}
+
 function compareEvents(left, right) {
   if ((left?.start ?? '') !== (right?.start ?? '')) {
     return (left?.start ?? '').localeCompare(right?.start ?? '')
@@ -72,8 +137,8 @@ function findNextClass(events) {
 
   for (const event of events) {
     if (!event.start) continue
-    const end = event.end ? new Date(event.end) : new Date(event.start)
-    if (end > now) return event
+    const start = new Date(event.start)
+    if (start > now) return event
   }
 
   return null
@@ -212,6 +277,10 @@ function simplifyTimeLabel(timeLabel) {
   return timeLabel.replace(/(\d{2})h00/g, '$1h')
 }
 
+function isElementOverflowing(element) {
+  return Boolean(element && element.scrollWidth - element.clientWidth > 1)
+}
+
 function getWidgetErrorMessage(error) {
   if (error?.name === 'AbortError') {
     return ''
@@ -292,6 +361,12 @@ function getStatusCopy(widgetState) {
         body: `Rien de prévu dans les ${NEXT_CLASS_LOOKAHEAD_DAYS} prochains jours.`,
         icon: 'carbon:calendar',
       }
+    case 'paused':
+      return {
+        title: 'Synchroniser le planning',
+        body: 'Ouvre ADE depuis cette carte pour mettre à jour le prochain cours sans lancer de synchro automatique.',
+        icon: 'carbon:calendar-settings',
+      }
     case 'error':
       return {
         title: 'Planning indisponible',
@@ -330,23 +405,60 @@ async function loadUpcomingClasses({ selection, signal, startDate = getTodayDate
   }
 }
 
-function WidgetNextClass({ visible = false, debug = false, selection = null }) {
+function WidgetNextClass({
+  visible = false,
+  debug = false,
+  selection = null,
+  sessionUser = null,
+  autoLoad = true,
+}) {
   const resourceIds = useMemo(() => buildResourceIdsFromSelection(selection), [selection])
   const resourceKey = resourceIds.join('|')
+  const cacheKey = useMemo(
+    () => buildNextClassCacheEntryKey(sessionUser, resourceKey),
+    [resourceKey, sessionUser],
+  )
   const hasResources = resourceIds.length > 0
   const [widgetState, setWidgetState] = useState(() => (
     debug
       ? createWidgetState({ status: 'ready', nextClass: buildFakeNextClass() })
-      : createWidgetState({ status: hasResources ? 'loading' : 'unconfigured' })
+      : createWidgetState({ status: hasResources ? (autoLoad ? 'loading' : 'paused') : 'unconfigured' })
   ))
   const [timeLabel, setTimeLabel] = useState('')
+  const [wide, setWide] = useState(false)
   const visibleRef = useRef(visible)
   const loadedEventsRef = useRef([])
   const loadedCompleteRef = useRef(true)
   const lastRefreshAtRef = useRef(0)
+  const quietUntilRef = useRef(0)
   const loadingRef = useRef(false)
   const abortControllerRef = useRef(null)
+  const titleRef = useRef(null)
+  const locationRef = useRef(null)
+  const teacherRef = useRef(null)
+  const timeLabelRef = useRef(null)
+  const timeRangeRef = useRef(null)
+  const groupRef = useRef(null)
   visibleRef.current = visible
+  const nextClass = widgetState.nextClass
+  const nextClassKey = nextClass ? getEventKey(nextClass) : ''
+  const displayTimeRange = simplifyTimeLabel(nextClass?.timeLabel)
+  const firstGroup = nextClass?.groups?.[0] || ''
+
+  const measureWideLayout = useCallback(() => {
+    const shouldExpand = [
+      titleRef.current,
+      locationRef.current,
+      teacherRef.current,
+      timeLabelRef.current,
+      timeRangeRef.current,
+      groupRef.current,
+    ].some(isElementOverflowing)
+
+    if (shouldExpand) {
+      setWide(true)
+    }
+  }, [])
 
   const syncNextClassFromLoadedEvents = useCallback(() => {
     const nextClass = findNextClass(loadedEventsRef.current)
@@ -441,6 +553,7 @@ function WidgetNextClass({ visible = false, debug = false, selection = null }) {
       loadedEventsRef.current = result.events
       loadedCompleteRef.current = result.complete
       lastRefreshAtRef.current = Date.now()
+      persistCachedNextClass(cacheKey, result)
 
       if (result.nextClass) {
         setWidgetState(createWidgetState({
@@ -474,13 +587,14 @@ function WidgetNextClass({ visible = false, debug = false, selection = null }) {
 
       loadingRef.current = false
     }
-  }, [debug, hasResources, selection])
+  }, [cacheKey, debug, hasResources, selection])
 
   useEffect(() => {
     abortControllerRef.current?.abort()
     loadedEventsRef.current = []
     loadedCompleteRef.current = true
     lastRefreshAtRef.current = 0
+    quietUntilRef.current = 0
     loadingRef.current = false
 
     if (debug) {
@@ -492,14 +606,57 @@ function WidgetNextClass({ visible = false, debug = false, selection = null }) {
       return undefined
     }
 
-    void loadNextClass()
+    const cachedResult = readCachedNextClass(cacheKey)
+
+    const cachedNextClass = cachedResult ? findNextClass(cachedResult.events) : null
+    const quietRemainingMs = cachedNextClass && autoLoad
+      ? Math.max(0, NEXT_CLASS_LOGIN_QUIET_MS - getRecentEntLoginAgeMs())
+      : 0
+    let quietTimeoutId = 0
+
+    if (cachedResult) {
+      loadedEventsRef.current = cachedResult.events
+      loadedCompleteRef.current = cachedResult.complete
+      lastRefreshAtRef.current = cachedResult.cachedAt
+
+      const nextClass = findNextClass(cachedResult.events)
+      if (nextClass) {
+        setWidgetState(createWidgetState({
+          status: 'ready',
+          nextClass,
+          complete: true,
+        }))
+      } else {
+        setWidgetState(createWidgetState({
+          status: cachedResult.complete ? 'empty' : 'limited',
+          complete: cachedResult.complete,
+        }))
+      }
+    } else if (!hasResources) {
+      setWidgetState(createWidgetState({ status: 'unconfigured' }))
+    } else if (!autoLoad) {
+      setWidgetState(createWidgetState({ status: 'paused' }))
+    }
+
+    if (quietRemainingMs > 0) {
+      quietUntilRef.current = Date.now() + quietRemainingMs
+      quietTimeoutId = window.setTimeout(() => {
+        quietUntilRef.current = 0
+        if (!loadingRef.current) {
+          void loadNextClass({ background: true })
+        }
+      }, quietRemainingMs)
+    } else if (autoLoad) {
+      void loadNextClass()
+    }
 
     return () => {
+      window.clearTimeout(quietTimeoutId)
       abortControllerRef.current?.abort()
       abortControllerRef.current = null
       loadingRef.current = false
     }
-  }, [debug, loadNextClass, resourceKey])
+  }, [autoLoad, cacheKey, debug, hasResources, loadNextClass, resourceKey])
 
   useEffect(() => {
     function updateWidgetState() {
@@ -515,7 +672,14 @@ function WidgetNextClass({ visible = false, debug = false, selection = null }) {
         setTimeLabel('')
       }
 
-      if (!debug && hasResources && visibleRef.current && !loadingRef.current) {
+      if (
+        !debug
+        && autoLoad
+        && hasResources
+        && visibleRef.current
+        && !loadingRef.current
+        && Date.now() >= quietUntilRef.current
+      ) {
         const shouldRefresh = Date.now() - lastRefreshAtRef.current >= NEXT_CLASS_REFRESH_MS
 
         if (shouldRefresh) {
@@ -528,15 +692,20 @@ function WidgetNextClass({ visible = false, debug = false, selection = null }) {
 
     const intervalId = window.setInterval(updateWidgetState, NEXT_CLASS_TICK_MS)
     return () => window.clearInterval(intervalId)
-  }, [debug, hasResources, loadNextClass, syncNextClassFromLoadedEvents, widgetState.nextClass])
+  }, [autoLoad, debug, hasResources, loadNextClass, syncNextClassFromLoadedEvents, widgetState.nextClass])
 
   useEffect(() => {
-    if (debug || !hasResources) {
+    if (debug || !autoLoad || !hasResources) {
       return undefined
     }
 
     function handleForegroundRefresh() {
       if (document.visibilityState === 'hidden' || loadingRef.current) {
+        return
+      }
+
+      if (Date.now() < quietUntilRef.current) {
+        syncNextClassFromLoadedEvents()
         return
       }
 
@@ -555,9 +724,39 @@ function WidgetNextClass({ visible = false, debug = false, selection = null }) {
       window.removeEventListener('focus', handleForegroundRefresh)
       document.removeEventListener('visibilitychange', handleForegroundRefresh)
     }
-  }, [debug, hasResources, loadNextClass, syncNextClassFromLoadedEvents])
+  }, [autoLoad, debug, hasResources, loadNextClass, syncNextClassFromLoadedEvents])
 
-  const nextClass = widgetState.nextClass
+  useEffect(() => {
+    if (widgetState.status !== 'ready' || !nextClass) {
+      setWide(false)
+      return
+    }
+
+    setWide(false)
+  }, [nextClassKey, widgetState.status, nextClass])
+
+  useEffect(() => {
+    if (widgetState.status !== 'ready' || !nextClass) {
+      return undefined
+    }
+
+    let frameId = 0
+    const measure = () => {
+      window.cancelAnimationFrame(frameId)
+      frameId = window.requestAnimationFrame(() => {
+        measureWideLayout()
+      })
+    }
+
+    measure()
+    window.addEventListener('resize', measure)
+
+    return () => {
+      window.removeEventListener('resize', measure)
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [displayTimeRange, firstGroup, measureWideLayout, nextClass, nextClassKey, timeLabel, widgetState.status])
+
   const hue = useMemo(
     () => nextClass?.title ? getClassHue(nextClass.title) : 207,
     [nextClass?.title],
@@ -565,10 +764,8 @@ function WidgetNextClass({ visible = false, debug = false, selection = null }) {
   const accentColor = `hsl(${hue}, 60%, 42%)`
   const classGradient = `linear-gradient(180deg, hsla(${hue}, 60%, 72%, 0.25) 0%, transparent 55%)`
   const classGradientDark = `linear-gradient(180deg, hsla(${hue}, 40%, 18%, 0.4) 0%, transparent 55%)`
-  const displayTimeRange = simplifyTimeLabel(nextClass?.timeLabel)
   const exactDateLabel = formatExactDateLabel(nextClass?.start)
   const shouldShowExactDateTooltip = Boolean(exactDateLabel && timeLabel && timeLabel !== 'En cours')
-  const firstGroup = nextClass?.groups?.[0] || ''
   const statusCopy = getStatusCopy(widgetState)
   const openAdePlanning = useCallback(() => {
     window.open(ADE_HREF, '_blank', 'noopener,noreferrer')
@@ -584,7 +781,7 @@ function WidgetNextClass({ visible = false, debug = false, selection = null }) {
 
   return (
     <article
-      className={`next-class-widget widget-card relative z-0 hover:z-10 shadow-md flex-[0_1_320px] h-[148px] p-5 border border-white rounded-[1.75rem] overflow-visible text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-[min(320px,100%)] max-md:h-[140px] max-md:p-4 max-md:rounded-3xl max-xs:flex-[1_1_100%] max-xs:min-w-0 flex flex-col gap-[6px] text-text cursor-pointer ${visible ? 'widget-card-visible delay-[80ms]' : ''}`}
+      className={`next-class-widget widget-card relative z-0 hover:z-10 shadow-md flex-[0_1_190px] h-[148px] p-5 border border-white rounded-[1.75rem] overflow-visible text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-[min(320px,100%)] max-md:h-[140px] max-md:p-4 max-md:rounded-3xl max-xs:flex-[1_1_100%] max-xs:min-w-0 flex flex-col gap-[6px] text-text cursor-pointer ${wide ? '2xl:flex-[0_1_380px]' : ''} ${visible ? 'widget-card-visible delay-[80ms]' : ''}`}
       style={{ '--class-gradient': classGradient, '--class-gradient-dark': classGradientDark }}
       aria-label="Prochain cours, ouvrir ADE"
       onClick={openAdePlanning}
@@ -612,18 +809,18 @@ function WidgetNextClass({ visible = false, debug = false, selection = null }) {
                 </div>
               </div>
               <div className="flex flex-col justify-center gap-[3px] min-w-0 flex-1">
-                <span className="m-0 leading-[1.06] text-base font-bold overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[15px]" title={nextClass.title}>{nextClass.title}</span>
+                <span ref={titleRef} className="block m-0 min-w-0 leading-[1.06] text-base font-bold overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[15px]" title={nextClass.title}>{nextClass.title}</span>
                 <div className="flex flex-col gap-[2px] min-w-0">
                   {nextClass.location ? (
                     <span className="flex items-center gap-[3px] min-w-0 opacity-60">
                       <Icon icon="carbon:location" className="w-[17px] h-[17px] shrink-0" aria-hidden="true" />
-                      <span className="min-w-0 leading-[1.06] text-base overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[15px]" title={nextClass.location}>{nextClass.location}</span>
+                      <span ref={locationRef} className="block min-w-0 leading-[1.06] text-base overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[15px]" title={nextClass.location}>{nextClass.location}</span>
                     </span>
                   ) : null}
                   {nextClass.teacher ? (
                     <span className="flex items-center gap-[3px] min-w-0 opacity-60">
                       <Icon icon="carbon:user-avatar" className="w-[17px] h-[17px] shrink-0" aria-hidden="true" />
-                      <span className="min-w-0 leading-[1.06] text-base overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[15px]" title={nextClass.teacher}>{nextClass.teacher}</span>
+                      <span ref={teacherRef} className="block min-w-0 leading-[1.06] text-base overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[15px]" title={nextClass.teacher}>{nextClass.teacher}</span>
                     </span>
                   ) : null}
                 </div>
@@ -638,7 +835,7 @@ function WidgetNextClass({ visible = false, debug = false, selection = null }) {
                     title={shouldShowExactDateTooltip ? exactDateLabel : undefined}
                   >
                     <Icon icon="carbon:time" className="w-[17px] h-[17px] shrink-0" aria-hidden="true" />
-                    <span className="min-w-0 leading-[1.06] text-base font-medium overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[15px]">{timeLabel}</span>
+                    <span ref={timeLabelRef} className="block min-w-0 leading-[1.06] text-base font-medium overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[15px]">{timeLabel}</span>
                     {shouldShowExactDateTooltip ? (
                       <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 inline-flex -translate-x-1/2 translate-y-1 scale-95 whitespace-nowrap rounded-full border border-white/70 bg-[rgba(17,24,39,0.92)] px-3 py-1.5 text-[12px] font-medium leading-none text-white opacity-0 shadow-[0_12px_32px_rgba(17,24,39,0.18)] transition-[opacity,transform] duration-180 ease-out invisible group-hover/next-class:visible group-hover/next-class:translate-y-0 group-hover/next-class:scale-100 group-hover/next-class:opacity-100">
                         {exactDateLabel}
@@ -646,12 +843,12 @@ function WidgetNextClass({ visible = false, debug = false, selection = null }) {
                     ) : null}
                   </span>
                   {displayTimeRange ? (
-                    <span className="min-w-0 leading-[1.06] text-base opacity-60 overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[15px]">{displayTimeRange}</span>
+                    <span ref={timeRangeRef} className="block min-w-0 leading-[1.06] text-base opacity-60 overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[15px]">{displayTimeRange}</span>
                   ) : null}
                 </div>
               </div>
               {firstGroup ? (
-                <span className="leading-[1.06] text-base font-semibold opacity-60 shrink-0 max-w-[38%] overflow-hidden text-ellipsis whitespace-nowrap text-right max-md:text-[15px]" title={firstGroup}>{firstGroup}</span>
+                <span ref={groupRef} className="block leading-[1.06] text-base font-semibold opacity-60 shrink-0 max-w-[38%] overflow-hidden text-ellipsis whitespace-nowrap text-right max-md:text-[15px]" title={firstGroup}>{firstGroup}</span>
               ) : null}
             </div>
           </>

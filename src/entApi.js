@@ -1,13 +1,59 @@
 export const ENT_ORIGIN = 'https://services-numeriques.univ-rennes.fr'
-export const ENT_PROXY_PREFIX = '/__ent_proxy'
-export const ENT_AUTH_PREFIX = '/__ent_auth'
+const APP_BASE_URL = (() => {
+  const rawBaseUrl = String(import.meta.env.BASE_URL || '/').trim()
+
+  if (!rawBaseUrl || rawBaseUrl === '/') {
+    return ''
+  }
+
+  return rawBaseUrl.endsWith('/') ? rawBaseUrl.slice(0, -1) : rawBaseUrl
+})()
+
+export const ENT_PROXY_PREFIX = `${APP_BASE_URL}/__ent_proxy`
+export const ENT_AUTH_PREFIX = `${APP_BASE_URL}/__ent_auth`
 export const DEFAULT_REFERER = `${ENT_ORIGIN}/f/services/normal/render.uP`
 const DEFAULT_ACCEPT = 'application/json, text/html;q=0.9, text/plain;q=0.8, */*;q=0.5'
 const DEMO_SESSION_MODE = 'demo'
+const RECENT_LOGIN_SESSION_KEY = 'l-ent:recent-login-at'
 let currentSessionMode = null
 
 function setCurrentSessionMode(nextMode) {
   currentSessionMode = nextMode === DEMO_SESSION_MODE ? DEMO_SESSION_MODE : null
+}
+
+function setRecentLoginMarker() {
+  try {
+    sessionStorage.setItem(RECENT_LOGIN_SESSION_KEY, String(Date.now()))
+  } catch {
+    // Ignore unavailable session storage.
+  }
+}
+
+function clearRecentLoginMarker() {
+  try {
+    sessionStorage.removeItem(RECENT_LOGIN_SESSION_KEY)
+  } catch {
+    // Ignore unavailable session storage.
+  }
+}
+
+export function getRecentEntLoginAgeMs() {
+  try {
+    const rawValue = sessionStorage.getItem(RECENT_LOGIN_SESSION_KEY)
+    const timestamp = Number(rawValue ?? 0)
+
+    if (!Number.isFinite(timestamp) || timestamp <= 0) {
+      return Infinity
+    }
+
+    return Math.max(0, Date.now() - timestamp)
+  } catch {
+    return Infinity
+  }
+}
+
+export function isRecentEntLogin(windowMs) {
+  return getRecentEntLoginAgeMs() <= Math.max(0, Number(windowMs) || 0)
 }
 
 function normalizeProxyPath(input) {
@@ -163,6 +209,11 @@ export async function getAuthSession() {
 
   const payload = await parseJsonPayload(response)
   setCurrentSessionMode(payload?.authenticated ? payload?.sessionMode : null)
+
+  if (!payload?.authenticated) {
+    clearRecentLoginMarker()
+  }
+
   return payload
 }
 
@@ -181,12 +232,20 @@ export async function loginToEnt({ username, password }) {
 
   const payload = await parseJsonPayload(response)
   setCurrentSessionMode(payload?.authenticated ? payload?.sessionMode : null)
+
+  if (payload?.authenticated) {
+    setRecentLoginMarker()
+  } else {
+    clearRecentLoginMarker()
+  }
+
   return payload
 }
 
 export async function logoutFromEnt() {
   clearGradesCache()
   localStorage.removeItem(ADE_TIMETABLE_CACHE_KEY)
+  clearRecentLoginMarker()
 
   const response = await fetch(`${ENT_AUTH_PREFIX}/logout`, {
     method: 'POST',
@@ -485,6 +544,7 @@ export async function getAdeUpcoming({
   date,
   lookaheadDays = 14,
   selection = null,
+  preferPlanning = false,
   signal,
 } = {}) {
   const response = await fetch(`${ENT_AUTH_PREFIX}/ade/upcoming`, {
@@ -497,6 +557,7 @@ export async function getAdeUpcoming({
       date,
       lookaheadDays,
       selection,
+      preferPlanning,
     }),
     signal,
   })

@@ -78,9 +78,9 @@ function WidgetLatestGrade({ visible = false }) {
       </div>
 
       <div className="flex-1 flex flex-col gap-[5px] justify-end">
-        <div className="flex items-start gap-[5px]">
+        <div className="flex items-start gap-[5px] max-md:items-end">
           <div
-            className="w-[6px] h-[39px] rounded-[25px] shrink-0 relative overflow-hidden"
+            className="w-[6px] h-[39px] rounded-[25px] shrink-0 relative overflow-hidden max-md:h-[34px]"
             style={{ background: accentColor }}
             aria-hidden="true"
           >

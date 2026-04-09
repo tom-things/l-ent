@@ -1159,6 +1159,26 @@ function App() {
 
     async function hydrateProfile() {
       try {
+        const storedSelection = getStoredTpSelection(sessionState.user)
+
+        if (storedSelection) {
+          if (cancelled) {
+            return
+          }
+
+          setSelectedTp(storedSelection)
+          setTpOnboardingState(createEmptyTpOnboardingState({
+            contextLabel: storedSelection.contextLabel ?? '',
+            program: storedSelection.programResourceId
+              ? {
+                  resourceId: storedSelection.programResourceId,
+                  label: storedSelection.programLabel ?? '',
+                }
+              : null,
+          }))
+          return
+        }
+
         let treeResponse = await getAdeTree()
         let treePayload = treeResponse?.tree
         const detectedEstablishment = detectEstablishmentFromAdeTree(treePayload)
@@ -1177,39 +1197,29 @@ function App() {
         persistEstablishment(detectedEstablishment, sessionState.user)
         setEstablishment(detectedEstablishment)
 
-        const storedSelection = getStoredTpSelection(sessionState.user)
+        const detectedYear = nextTpOnboardingState.detectedSelections.year
 
-        if (storedSelection) {
-          setSelectedTp(storedSelection)
-          setTpOnboardingState(createEmptyTpOnboardingState({
-            contextLabel: storedSelection.contextLabel || nextTpOnboardingState.contextLabel,
-            program: nextTpOnboardingState.program,
-          }))
-        } else {
-          const detectedYear = nextTpOnboardingState.detectedSelections.year
+        if (detectedYear?.resourceId) {
+          const detectedYearTreeResponse = await getAdeTree(detectedYear.resourceId)
+          const detectedYearStep = buildNextTpStepFromTree(detectedYearTreeResponse?.tree)
 
-          if (detectedYear?.resourceId) {
-            const detectedYearTreeResponse = await getAdeTree(detectedYear.resourceId)
-            const detectedYearStep = buildNextTpStepFromTree(detectedYearTreeResponse?.tree)
-
-            if (cancelled) {
-              return
-            }
-
-            nextTpOnboardingState = {
-              ...nextTpOnboardingState,
-              contextLabel: nextTpOnboardingState.contextLabel || detectedYearStep.contextLabel,
-              selectedYear: detectedYear,
-              tdOptions: detectedYearStep.options,
-              errorMessage: detectedYearStep.options.length > 0
-                ? ''
-                : "Aucun groupe de TD n'a été trouvé pour le moment.",
-            }
+          if (cancelled) {
+            return
           }
 
-          setSelectedTp(null)
-          setTpOnboardingState(nextTpOnboardingState)
+          nextTpOnboardingState = {
+            ...nextTpOnboardingState,
+            contextLabel: nextTpOnboardingState.contextLabel || detectedYearStep.contextLabel,
+            selectedYear: detectedYear,
+            tdOptions: detectedYearStep.options,
+            errorMessage: detectedYearStep.options.length > 0
+              ? ''
+              : "Aucun groupe de TD n'a été trouvé pour le moment.",
+          }
         }
+
+        setSelectedTp(null)
+        setTpOnboardingState(nextTpOnboardingState)
       } catch {
         if (cancelled) {
           return
@@ -2032,6 +2042,7 @@ function App() {
               userName={sessionState.givenName ?? sessionState.user}
               isSessionReady={!sessionState.checking}
               establishment={establishment}
+              sessionUser={sessionState.user}
               selectedPlanningSelection={selectedTp}
               debugNextClass={debugNextClass}
               canUseServerLaunch={sessionState.canUseServerLaunch}
