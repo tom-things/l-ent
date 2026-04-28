@@ -2502,7 +2502,7 @@ function createEntDevAuthPlugin() {
           : new Date().toISOString().slice(0, 10)
         const lookaheadDays = Math.max(
           1,
-          Math.min(21, Number.parseInt(String(body.lookaheadDays ?? '14'), 10) || 14),
+          Math.min(21, Number.parseInt(String(body.lookaheadDays ?? '21'), 10) || 21),
         )
         const selection = body.selection && typeof body.selection === 'object'
           ? body.selection

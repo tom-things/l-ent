@@ -746,6 +746,12 @@ export function buildDemoAlertsPayload() {
 
 export function buildDemoGradesPayload() {
   const currentReleve = {
+    semestre: {
+      groupes: [
+        { group_name: 'TD B' },
+        { group_name: 'TP 3' },
+      ],
+    },
     ressources: {
       R5_07: {
         titre: 'UX Writing',

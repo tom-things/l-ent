@@ -723,3 +723,120 @@
 .app-card-enter {
   animation: app-card-enter 350ms ease both;
 }
+
+/* ── Next class widget inside sidebar: normalize sizing ── */
+
+.sidebar-next-class > article {
+  flex: none;
+  width: 100%;
+  max-width: 100%;
+  height: 148px;
+  min-height: 148px;
+}
+
+/* ── Sidebar grade pocket: tinted grade tag ── */
+
+.sidebar-grade-tag {
+  background: hsl(var(--tag-hue), 80%, 94%);
+  color: hsl(var(--tag-hue), 70%, 26%);
+}
+
+@media (prefers-color-scheme: dark) {
+  .sidebar-grade-tag {
+    background: hsla(var(--tag-hue), 50%, 32%, 0.45);
+    color: hsl(var(--tag-hue), 78%, 80%);
+  }
+}
+
+/* ── Sidebar grade pocket: gradient background (matches next class widget) ── */
+
+.sidebar-grade-pocket {
+  background-color: var(--color-widget-bg);
+  background-image: var(--grade-gradient, none);
+  background-repeat: no-repeat;
+}
+
+.sidebar-grade-pocket:hover {
+  background-color: var(--color-bg-subtle);
+}
+
+@media (prefers-color-scheme: dark) {
+  .sidebar-grade-pocket {
+    background-image: var(--grade-gradient-dark, none);
+  }
+}
+
+/* ── Sidebar favorites: vertical list ── */
+
+.favorites-bar--sidebar > div:not(:first-child) {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 4px;
+  overflow: visible;
+  margin: 0;
+  padding: 0;
+}
+
+.favorites-bar--sidebar .favorites-strip-item {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 6px 0;
+  margin: 0;
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.favorites-bar--sidebar .favorites-strip-item > span:first-child {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  flex-shrink: 0;
+}
+
+.favorites-bar--sidebar .favorites-strip-item > span:last-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-line-clamp: unset;
+  font-size: 14px;
+  line-height: 1.1;
+  display: block;
+}
+
+/* Skeleton loading state inside sidebar favorites */
+.favorites-bar--sidebar [role="status"] > div {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  gap: 10px;
+  padding: 6px 0;
+  margin: 0;
+  border-radius: 0;
+}
+
+.favorites-bar--sidebar [role="status"] .badge-placeholder {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  flex-shrink: 0;
+}
+
+.favorites-bar--sidebar [role="status"] .text-placeholder-shimmer {
+  flex: 1 1 auto;
+  width: auto;
+  max-width: 100%;
+  height: 12px;
+  min-width: 0;
+}

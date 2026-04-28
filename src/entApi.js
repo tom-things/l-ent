@@ -338,6 +338,130 @@ function computeWeightedAverage(entries) {
   return totalCoef > 0 ? totalWeighted / totalCoef : null
 }
 
+function getCurrentGradesReleve(gradesData = null) {
+  const semestres = Array.isArray(gradesData?.semestres) ? gradesData.semestres : []
+
+  for (let index = semestres.length - 1; index >= 0; index -= 1) {
+    const releve = semestres[index]?.['relevé']
+    if (releve && typeof releve === 'object') {
+      return releve
+    }
+  }
+
+  return gradesData?.['relevé'] && typeof gradesData['relevé'] === 'object'
+    ? gradesData['relevé']
+    : null
+}
+
+function normalizeScodocGroupLabel(label) {
+  return String(label ?? '')
+    .normalize('NFKC')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function collectScodocGroupLabels(source, collector) {
+  if (!source) {
+    return
+  }
+
+  if (Array.isArray(source)) {
+    for (const item of source) {
+      if (typeof item === 'string') {
+        const normalizedLabel = normalizeScodocGroupLabel(item)
+        if (normalizedLabel) {
+          collector.push(normalizedLabel)
+        }
+        continue
+      }
+
+      if (item && typeof item === 'object') {
+        const namedValue = [
+          item.group_name,
+          item.nom,
+          item.name,
+          item.label,
+          item.groupe,
+        ].find((value) => typeof value === 'string' && value.trim())
+
+        if (namedValue) {
+          collector.push(normalizeScodocGroupLabel(namedValue))
+        }
+      }
+    }
+    return
+  }
+
+  if (typeof source === 'object') {
+    for (const value of Object.values(source)) {
+      collectScodocGroupLabels(value, collector)
+    }
+  }
+}
+
+function scoreScodocGroupLabel(label, kind) {
+  const normalizedLabel = normalizeScodocGroupLabel(label)
+  const compactLabel = normalizedLabel.replace(/\s+/g, '').toUpperCase()
+  const prefix = kind === 'td' ? 'TD' : 'TP'
+
+  if (!compactLabel.includes(prefix)) {
+    return -1
+  }
+
+  let score = 0
+
+  if (compactLabel.startsWith(prefix)) {
+    score += 6
+  } else {
+    score += 2
+  }
+
+  if (new RegExp(`\\b${prefix}\\b`, 'i').test(normalizedLabel)) {
+    score += 2
+  }
+
+  if (/\d/.test(compactLabel)) {
+    score += 1
+  }
+
+  return score
+}
+
+export function detectScodocGroupSelection(gradesData = null) {
+  const releve = getCurrentGradesReleve(gradesData)
+  const rawLabels = []
+
+  collectScodocGroupLabels(releve?.semestre?.groupes, rawLabels)
+  collectScodocGroupLabels(releve?.groupes, rawLabels)
+  collectScodocGroupLabels(releve?.rang_group, rawLabels)
+
+  const labels = rawLabels.filter((value, index) => rawLabels.indexOf(value) === index)
+  let bestTdLabel = null
+  let bestTdScore = -1
+  let bestTpLabel = null
+  let bestTpScore = -1
+
+  for (const label of labels) {
+    const tdScore = scoreScodocGroupLabel(label, 'td')
+    if (tdScore > bestTdScore) {
+      bestTdScore = tdScore
+      bestTdLabel = label
+    }
+
+    const tpScore = scoreScodocGroupLabel(label, 'tp')
+    if (tpScore > bestTpScore) {
+      bestTpScore = tpScore
+      bestTpLabel = label
+    }
+  }
+
+  return {
+    labels,
+    tdLabel: bestTdScore >= 0 ? bestTdLabel : null,
+    tpLabel: bestTpScore >= 0 ? bestTpLabel : null,
+  }
+}
+
 export async function getAverageGrade() {
   const data = await getGrades()
 
@@ -542,7 +666,7 @@ export async function getAdeCalendarMetadata({ date, ...extra } = {}) {
 
 export async function getAdeUpcoming({
   date,
-  lookaheadDays = 14,
+  lookaheadDays = 21,
   selection = null,
   preferPlanning = false,
   signal,

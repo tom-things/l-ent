@@ -102,6 +102,8 @@ function labelsMatch(left, right) {
   }
 
   return normalizedLeft === normalizedRight
+    || normalizedLeft.startsWith(`${normalizedRight} `)
+    || normalizedRight.startsWith(`${normalizedLeft} `)
     || normalizedLeft.endsWith(` ${normalizedRight}`)
     || normalizedRight.endsWith(` ${normalizedLeft}`)
 }
@@ -327,7 +329,7 @@ export function normalizeAdeUpcomingResponse(rawData) {
   }
 }
 
-export function limitAdeUpcomingEvents(events = [], { date, lookaheadDays = 14 } = {}) {
+export function limitAdeUpcomingEvents(events = [], { date, lookaheadDays = 21 } = {}) {
   if (!date) {
     return events
   }
@@ -363,7 +365,7 @@ export function limitAdeUpcomingEvents(events = [], { date, lookaheadDays = 14 }
   })
 }
 
-export function buildAdeUpcomingPath({ date, lookaheadDays = 14, refresh = 0 } = {}) {
+export function buildAdeUpcomingPath({ date, lookaheadDays = 21, refresh = 0 } = {}) {
   const params = new URLSearchParams()
 
   if (date) {
@@ -554,7 +556,7 @@ export function createAdeApiClient({
 
   async function fetchAdeUpcomingRaw(jar, credentials, {
     date,
-    lookaheadDays = 14,
+    lookaheadDays = 21,
     resourceIds = [],
     cacheScope = null,
   } = {}) {
@@ -637,7 +639,7 @@ export function createAdeApiClient({
 
   async function fetchAdeUpcomingFromApi(jar, credentials, {
     date,
-    lookaheadDays = 14,
+    lookaheadDays = 21,
     resourceIds = [],
     selectionLabels = [],
     cacheScope = null,

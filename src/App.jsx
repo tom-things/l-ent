@@ -3,6 +3,7 @@ import { Icon } from '@iconify/react'
 import favicon from './assets/favicon.png'
 import AppHeader from './components/AppHeader'
 import AppFooter from './components/AppFooter'
+import Sidebar from './components/Sidebar'
 import AccountModal from './components/AccountModal'
 import LentButton from './components/LentButton'
 import LoginPage from './components/LoginPage'
@@ -27,6 +28,7 @@ import {
   buildEntProxyHref,
   clearAdeTimetableCache,
   clearGradesCache,
+  detectScodocGroupSelection,
   getAccountInfo,
   getAdeAlerts,
   getAdeCalendarMetadata,
@@ -74,6 +76,38 @@ function clearLegacySensitiveClientCaches() {
 
   clearGradesCache()
   clearAdeTimetableCache()
+}
+
+async function clearClientRuntimeState() {
+  try {
+    localStorage.clear()
+  } catch {
+    // Ignore storage failures
+  }
+
+  try {
+    sessionStorage.clear()
+  } catch {
+    // Ignore storage failures
+  }
+
+  if (typeof window !== 'undefined' && 'caches' in window) {
+    try {
+      const cacheKeys = await window.caches.keys()
+      await Promise.all(cacheKeys.map((cacheKey) => window.caches.delete(cacheKey)))
+    } catch {
+      // Ignore cache storage failures
+    }
+  }
+
+  if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+    try {
+      const registrations = await navigator.serviceWorker.getRegistrations()
+      await Promise.all(registrations.map((registration) => registration.unregister()))
+    } catch {
+      // Ignore service worker failures
+    }
+  }
 }
 
 function prettyPrint(value) {
@@ -322,6 +356,39 @@ function findTpOptionByResourceId(options, resourceId) {
   }
 
   return (options ?? []).find((option) => option?.resourceId === normalizedResourceId) ?? null
+}
+
+function normalizeSelectionLabel(label) {
+  return String(label ?? '')
+    .normalize('NFKC')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+function selectionLabelsMatch(left, right) {
+  const normalizedLeft = normalizeSelectionLabel(left)
+  const normalizedRight = normalizeSelectionLabel(right)
+
+  if (!normalizedLeft || !normalizedRight) {
+    return false
+  }
+
+  return normalizedLeft === normalizedRight
+    || normalizedLeft.startsWith(`${normalizedRight} `)
+    || normalizedRight.startsWith(`${normalizedLeft} `)
+    || normalizedLeft.endsWith(` ${normalizedRight}`)
+    || normalizedRight.endsWith(` ${normalizedLeft}`)
+}
+
+function findTpOptionByLabel(options, label) {
+  const normalizedLabel = normalizeSelectionLabel(label)
+
+  if (!normalizedLabel) {
+    return null
+  }
+
+  return (options ?? []).find((option) => selectionLabelsMatch(option?.label, label)) ?? null
 }
 
 async function loadTdOptionsForAccountModal(yearOption) {
@@ -861,6 +928,10 @@ function App() {
   const [accountModalPhoto, setAccountModalPhoto] = useState(null)
   const [accountModalPlanningState, setAccountModalPlanningState] = useState(createEmptyAccountModalPlanningState)
   const [dashboardRevealNonce, setDashboardRevealNonce] = useState(0)
+  const [isSidebarViewport, setIsSidebarViewport] = useState(() => (
+    typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
+  ))
+  const [favoritesSlotEl, setFavoritesSlotEl] = useState(null)
   const [sessionState, setSessionState] = useState({
     checking: true,
     authenticated: false,
@@ -1179,6 +1250,16 @@ function App() {
           return
         }
 
+        let scodocGroupSelection = null
+        try {
+          const gradesResponse = await getGrades()
+          if (gradesResponse?.authenticated) {
+            scodocGroupSelection = detectScodocGroupSelection(gradesResponse.grades)
+          }
+        } catch {
+          // Grades are best-effort for onboarding auto-selection.
+        }
+
         let treeResponse = await getAdeTree()
         let treePayload = treeResponse?.tree
         const detectedEstablishment = detectEstablishmentFromAdeTree(treePayload)
@@ -1215,6 +1296,51 @@ function App() {
             errorMessage: detectedYearStep.options.length > 0
               ? ''
               : "Aucun groupe de TD n'a été trouvé pour le moment.",
+          }
+
+          const autoDetectedTd = findTpOptionByLabel(detectedYearStep.options, scodocGroupSelection?.tdLabel)
+
+          if (autoDetectedTd?.resourceId) {
+            const detectedTdTreeResponse = await getAdeTree(autoDetectedTd.resourceId)
+            const detectedTdStep = buildNextTpStepFromTree(detectedTdTreeResponse?.tree)
+
+            if (cancelled) {
+              return
+            }
+
+            const autoDetectedTp = findTpOptionByLabel(detectedTdStep.options, scodocGroupSelection?.tpLabel)
+            const autoStoredSelection = buildStoredTpSelection(
+              nextTpOnboardingState.program,
+              detectedYear,
+              autoDetectedTd,
+              autoDetectedTp,
+              nextTpOnboardingState.contextLabel || detectedTdStep.contextLabel,
+            )
+
+            if (autoStoredSelection && (autoDetectedTp?.resourceId || detectedTdStep.options.length === 0)) {
+              persistTpSelection(autoStoredSelection, sessionState.user)
+              clearAdeTimetableCache()
+              setSelectedTp(autoStoredSelection)
+              setTpOnboardingState(createEmptyTpOnboardingState({
+                contextLabel: autoStoredSelection.contextLabel ?? '',
+                program: nextTpOnboardingState.program,
+                selectedYear: detectedYear,
+                selectedTd: autoDetectedTd,
+              }))
+              return
+            }
+
+            nextTpOnboardingState = {
+              ...nextTpOnboardingState,
+              contextLabel: nextTpOnboardingState.contextLabel || detectedTdStep.contextLabel,
+              selectedTd: autoDetectedTd,
+              tpOptions: detectedTdStep.options,
+              detectedSelections: {
+                ...nextTpOnboardingState.detectedSelections,
+                td: autoDetectedTd,
+                tp: autoDetectedTp,
+              },
+            }
           }
         }
 
@@ -1386,6 +1512,39 @@ function App() {
   }, [sessionState.authenticated])
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined
+    }
+
+    const mediaQuery = window.matchMedia('(min-width: 1024px)')
+    const handleChange = (event) => setIsSidebarViewport(event.matches)
+    setIsSidebarViewport(mediaQuery.matches)
+    mediaQuery.addEventListener('change', handleChange)
+
+    return () => {
+      mediaQuery.removeEventListener('change', handleChange)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!sessionState.authenticated) {
+      return undefined
+    }
+
+    let cancelled = false
+
+    void resolveAccountProfilePhoto(sessionState.account).then((photoSrc) => {
+      if (!cancelled) {
+        setAccountModalPhoto(photoSrc)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [sessionState.authenticated, sessionState.account])
+
+  useEffect(() => {
     if (!isAccountModalOpen || !sessionState.authenticated) {
       return undefined
     }
@@ -1393,28 +1552,23 @@ function App() {
     let cancelled = false
 
     setAccountModalPlanningState(createStoredPlanningDraftState(selectedTp, {
-      booting: true,
-      bootingMessage: 'Chargement des infos du profil...',
+      booting: false,
+      bootingMessage: '',
       loading: true,
       loadingMessage: 'Chargement ADE...',
     }))
-    setAccountModalPhoto(null)
 
     void buildAccountModalPlanningState(selectedTp)
       .then((nextPlanningState) => {
         if (!cancelled) {
-          setAccountModalPlanningState((current) => ({
-            ...nextPlanningState,
-            booting: current.booting,
-            bootingMessage: current.bootingMessage,
-          }))
+          setAccountModalPlanningState(nextPlanningState)
         }
       })
       .catch((error) => {
         if (!cancelled) {
-          setAccountModalPlanningState((current) => createStoredPlanningDraftState(selectedTp, {
-            booting: current.booting,
-            bootingMessage: current.bootingMessage,
+          setAccountModalPlanningState(createStoredPlanningDraftState(selectedTp, {
+            booting: false,
+            bootingMessage: '',
             loading: false,
             loadingMessage: '',
             errorMessage: getFrenchTpLoadErrorMessage(error),
@@ -1422,21 +1576,10 @@ function App() {
         }
       })
 
-    void resolveAccountProfilePhoto(sessionState.account).then((photoSrc) => {
-      if (!cancelled) {
-        setAccountModalPhoto(photoSrc)
-        setAccountModalPlanningState((current) => ({
-          ...current,
-          booting: false,
-          bootingMessage: '',
-        }))
-      }
-    })
-
     return () => {
       cancelled = true
     }
-  }, [isAccountModalOpen, selectedTp, sessionState.account, sessionState.authenticated])
+  }, [isAccountModalOpen, selectedTp, sessionState.authenticated])
 
   const handleOpenAccountModal = useCallback(() => {
     if (!sessionState.authenticated || sessionState.checking) {
@@ -1860,6 +2003,31 @@ function App() {
     setDebugOpen(false)
   }, [sessionState.authenticated, sessionState.user])
 
+  const handleDebugFullReset = useCallback(async () => {
+    setDebugState((current) => ({
+      ...current,
+      loading: true,
+      label: 'Reset complet',
+      error: '',
+    }))
+
+    try {
+      if (sessionState.authenticated) {
+        try {
+          await logoutFromEnt()
+        } catch {
+          // Continue with the client reset even if server logout fails.
+        }
+      }
+
+      await clearClientRuntimeState()
+      window.location.reload()
+    } catch (error) {
+      const message = getErrorMessage(error)
+      commitDebugState('Reset complet', null, message)
+    }
+  }, [commitDebugState, sessionState.authenticated])
+
   const handleDebugProfilePhoto = useCallback(async () => {
     setDebugOutputTab('api')
     setDebugImagePreview(null)
@@ -2022,33 +2190,53 @@ function App() {
       ) : shouldShowCompletionScreen ? (
         <OnboardingCompletionPage userName={completionScreenState.userName} isLeaving={completionScreenState.leaving} />
       ) : sessionState.authenticated ? (
-        <div key={`dashboard-${dashboardRevealNonce}`} className={dashboardRevealNonce > 0 ? 'dashboard-reveal-shell flex min-h-screen flex-col' : 'flex min-h-screen flex-col'}>
-          <AppHeader
+        <div key={`dashboard-${dashboardRevealNonce}`} className={`${dashboardRevealNonce > 0 ? 'dashboard-reveal-shell ' : ''}flex flex-col 4xl:flex-row min-h-screen 4xl:h-screen 4xl:min-h-0 4xl:overflow-hidden`}>
+          <Sidebar
             authenticated={sessionState.authenticated}
             checking={sessionState.checking}
-            onPrimaryAction={handleHeaderAction}
-            onAccountAction={handleOpenAccountModal}
+            userName={[
+              sessionState.account?.given_name,
+              sessionState.account?.family_name,
+            ].filter(Boolean).join(' ') || sessionState.account?.name || sessionState.givenName || sessionState.user}
+            userSubtitle={selectedTp?.label ?? selectedTp?.tpLabel ?? selectedTp?.tdLabel ?? selectedTp?.yearLabel ?? null}
+            profilePhotoSrc={accountModalPhoto}
+            onLogout={handleHeaderAction}
+            onAccountClick={handleOpenAccountModal}
+            favoritesSlotRef={setFavoritesSlotEl}
           />
-          {sessionState.warning ? (
-            <div className="px-10 pt-4 max-xl:px-6 max-md:px-4">
-              <div className="flex items-start gap-3 rounded-[20px] border border-[#f2cf8f] bg-[#fff7e8] px-4 py-3 text-text shadow-[0_10px_30px_rgba(0,0,0,0.05)] dark:border-[#6a4d15] dark:bg-[#2f2410]">
-                <Icon icon="carbon:warning-filled" className="mt-0.5 h-[18px] w-[18px] shrink-0 text-[#b76e00]" aria-hidden="true" />
-                <p className="m-0 text-sm font-medium leading-[1.5] font-body">{sessionState.warning}</p>
-              </div>
+          <div className="flex flex-col flex-1 min-w-0 4xl:h-screen 4xl:overflow-y-auto">
+            <div className="4xl:hidden">
+              <AppHeader
+                authenticated={sessionState.authenticated}
+                checking={sessionState.checking}
+                onPrimaryAction={handleHeaderAction}
+                onAccountAction={handleOpenAccountModal}
+              />
             </div>
-          ) : null}
-          <div className="flex-1 min-h-0 bg-bg">
-            <WidgetContainer
-              userName={sessionState.givenName ?? sessionState.user}
-              isSessionReady={!sessionState.checking}
-              establishment={establishment}
-              sessionUser={sessionState.user}
-              selectedPlanningSelection={selectedTp}
-              debugNextClass={debugNextClass}
-              canUseServerLaunch={sessionState.canUseServerLaunch}
-            />
+            {sessionState.warning ? (
+              <div className="px-10 pt-4 max-xl:px-6 max-md:px-4 4xl:pt-10">
+                <div className="flex items-start gap-3 rounded-[20px] border border-[#f2cf8f] bg-[#fff7e8] px-4 py-3 text-text shadow-[0_10px_30px_rgba(0,0,0,0.05)] dark:border-[#6a4d15] dark:bg-[#2f2410]">
+                  <Icon icon="carbon:warning-filled" className="mt-0.5 h-[18px] w-[18px] shrink-0 text-[#b76e00]" aria-hidden="true" />
+                  <p className="m-0 text-sm font-medium leading-[1.5] font-body">{sessionState.warning}</p>
+                </div>
+              </div>
+            ) : null}
+            <div className="flex-1 min-h-0 4xl:flex-none 4xl:min-h-0 bg-bg">
+              <WidgetContainer
+                userName={sessionState.givenName ?? sessionState.user}
+                isSessionReady={!sessionState.checking}
+                establishment={establishment}
+                sessionUser={sessionState.user}
+                selectedPlanningSelection={selectedTp}
+                debugNextClass={debugNextClass}
+                canUseServerLaunch={sessionState.canUseServerLaunch}
+                favoritesPortalTarget={isSidebarViewport ? favoritesSlotEl : null}
+              />
+            </div>
+            <div className="4xl:mt-auto">
+              <AppFooter />
+            </div>
           </div>
-          <AppFooter />
         </div>
       ) : (
         <LoginPage
@@ -2194,6 +2382,14 @@ function App() {
                 disabled={!sessionState.authenticated || sessionState.checking}
               >
                 Refaire onboarding
+              </button>
+              <button
+                type="button"
+                className="appearance-none border border-border rounded-[12px] bg-[#5b1f1f] text-white py-[0.7rem] px-[0.9rem] font-inherit font-semibold leading-[1.1] disabled:opacity-45 disabled:cursor-wait"
+                onClick={() => void handleDebugFullReset()}
+                disabled={debugState.loading || sessionState.checking}
+              >
+                Reset complet
               </button>
               <button
                 type="button"

@@ -5,7 +5,7 @@ import { ENT_AUTH_PREFIX, getAdeUpcoming, getRecentEntLoginAgeMs } from '../entA
 const CLASS_COLORS_KEY = 'l-ent:class-colors'
 const NEXT_CLASS_CACHE_KEY = 'l-ent:next-class-cache'
 const NEXT_CLASS_CACHE_TTL_MS = 48 * 60 * 60 * 1000
-const NEXT_CLASS_LOOKAHEAD_DAYS = 14
+const NEXT_CLASS_LOOKAHEAD_DAYS = 21
 const NEXT_CLASS_TICK_MS = 30 * 1000
 const NEXT_CLASS_REFRESH_MS = 5 * 60 * 1000
 const NEXT_CLASS_LOGIN_QUIET_MS = 90 * 1000

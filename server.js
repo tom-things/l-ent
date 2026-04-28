@@ -2437,7 +2437,7 @@ app.post('/__ent_auth/ade/upcoming', async (req, res) => {
       : new Date().toISOString().slice(0, 10)
     const lookaheadDays = Math.max(
       1,
-      Math.min(21, Number.parseInt(String(req.body?.lookaheadDays ?? '14'), 10) || 14),
+      Math.min(21, Number.parseInt(String(req.body?.lookaheadDays ?? '21'), 10) || 21),
     )
     const selection = req.body?.selection && typeof req.body.selection === 'object'
       ? req.body.selection

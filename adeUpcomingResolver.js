@@ -190,7 +190,7 @@ async function recoverSelectionLabelsFromPlanningTree(fetchPlanningTreeFromRpc, 
 
 async function fetchPlanningFallbackUpcoming(fetchPlanningTimetableFromRpc, jar, {
   date,
-  lookaheadDays = 14,
+  lookaheadDays = 21,
   resourceIds = [],
   selectionLabels = [],
   cacheScope = null,
@@ -252,7 +252,7 @@ export function createAdeUpcomingResolver({
 }) {
   async function resolveAdeUpcoming(jar, credentials, {
     date,
-    lookaheadDays = 14,
+    lookaheadDays = 21,
     resourceIds = [],
     selectionLabels = [],
     cacheScope = null,

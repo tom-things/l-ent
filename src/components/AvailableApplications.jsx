@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Icon } from '@iconify/react'
 import { getAppIcon } from '../assets/app_icons/uni_rennes'
 import {
@@ -423,10 +424,6 @@ function normalizeAllServices(bootstrap) {
 
   for (const tab of serviceTabs) {
     for (const section of tab.sections) {
-      if (isFavoritesLikeLabel(section.title)) {
-        continue
-      }
-
       for (const service of section.services) {
         const metadata = findPortletMetadata(service, portletLookup)
         const app = normalizeServiceEntry(service, metadata, {
@@ -742,6 +739,7 @@ function getContextMenuPosition(event) {
 function AvailableApplications({
   establishment = null,
   canUseServerLaunch = true,
+  favoritesPortalTarget = null,
 }) {
   const [viewState, setViewState] = useState({
     status: 'loading',
@@ -1512,8 +1510,8 @@ function AvailableApplications({
     return null
   }
 
-  return (
-    <section className="grid gap-[10px] relative text-brand" aria-labelledby="favorites-strip-title">
+  const favoritesSectionContent = (
+    <section className={`favorites-bar grid gap-[10px] relative text-brand${favoritesPortalTarget ? ' favorites-bar--sidebar' : ''}`} aria-labelledby="favorites-strip-title">
       <div className="flex items-center gap-[5px]">
         <Icon icon="carbon:star" className="w-[17px] h-[17px] text-brand shrink-0" aria-hidden="true" />
         <h2 className="m-0 text-base font-medium leading-[1.06]" id="favorites-strip-title">Favoris</h2>
@@ -1614,9 +1612,17 @@ function AvailableApplications({
       {favoriteActionState.error ? (
         <p className="m-0 text-sm font-medium leading-[1.3] text-text-secondary font-body">{favoriteActionState.error}</p>
       ) : null}
+    </section>
+  )
+
+  return (
+    <>
+      {favoritesPortalTarget && typeof document !== 'undefined'
+        ? createPortal(favoritesSectionContent, favoritesPortalTarget)
+        : favoritesSectionContent}
 
       {visibleServices.length > 0 ? (
-        <div className="grid gap-4 mt-7 text-brand">
+        <div className={`grid gap-4 text-brand${favoritesPortalTarget ? '' : ' mt-7'}`}>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-[5px]">
               <Icon icon="carbon:app-switcher" className="w-[17px] h-[17px] text-brand shrink-0" aria-hidden="true" />
@@ -1788,7 +1794,7 @@ function AvailableApplications({
           )}
         </div>
       )})() : null}
-    </section>
+    </>
   )
 }
 
