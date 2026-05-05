@@ -11,7 +11,7 @@ function isLocalPwaHost(hostname = '') {
   return LOCAL_PWA_HOSTS.has(hostname) || hostname.endsWith('.local')
 }
 
-function LocalPwaManager({ forceOpen, onForceOpenChange }) {
+function LocalPwaManager({ forceOpen, onForceOpenChange, onApplyHandlerChange }) {
   useEffect(() => {
     if (!('serviceWorker' in navigator)) {
       return undefined
@@ -66,6 +66,11 @@ function LocalPwaManager({ forceOpen, onForceOpenChange }) {
     window.location.reload()
   }, [onForceOpenChange])
 
+  useEffect(() => {
+    onApplyHandlerChange?.(reloadPreview)
+    return () => onApplyHandlerChange?.(null)
+  }, [reloadPreview, onApplyHandlerChange])
+
   return (
     <RefreshedPrompt
       visible={forceOpen}
@@ -79,14 +84,17 @@ function LocalPwaManager({ forceOpen, onForceOpenChange }) {
   )
 }
 
-function ProductionPwaManager({ forceOpen, onForceOpenChange }) {
+function ProductionPwaManager({ forceOpen, onForceOpenChange, onUpdateAvailable, onApplyHandlerChange }) {
   const [isApplyingUpdate, setIsApplyingUpdate] = useState(false)
+  const [hasPendingUpdate, setHasPendingUpdate] = useState(false)
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW({
     onNeedRefresh() {
       setIsApplyingUpdate(false)
+      setHasPendingUpdate(true)
+      onUpdateAvailable?.()
     },
     onRegisterError(error) {
       console.error('PWA registration failed', error)
@@ -109,7 +117,7 @@ function ProductionPwaManager({ forceOpen, onForceOpenChange }) {
     setIsApplyingUpdate(true)
 
     try {
-      if (needRefresh) {
+      if (needRefresh || hasPendingUpdate) {
         await updateServiceWorker(true)
         return
       }
@@ -120,7 +128,12 @@ function ProductionPwaManager({ forceOpen, onForceOpenChange }) {
       console.error('Failed to apply PWA update', error)
       setIsApplyingUpdate(false)
     }
-  }, [isApplyingUpdate, needRefresh, onForceOpenChange, updateServiceWorker])
+  }, [hasPendingUpdate, isApplyingUpdate, needRefresh, onForceOpenChange, updateServiceWorker])
+
+  useEffect(() => {
+    onApplyHandlerChange?.(applyUpdate)
+    return () => onApplyHandlerChange?.(null)
+  }, [applyUpdate, onApplyHandlerChange])
 
   return (
     <RefreshedPrompt
@@ -136,12 +149,25 @@ function ProductionPwaManager({ forceOpen, onForceOpenChange }) {
   )
 }
 
-export default function PwaUpdateManager({ forceOpen = false, onForceOpenChange }) {
+export default function PwaUpdateManager({ forceOpen = false, onForceOpenChange, onUpdateAvailable, onApplyHandlerChange }) {
   const isLocalRuntime = typeof window !== 'undefined' && isLocalPwaHost(window.location.hostname)
 
   if (isLocalRuntime) {
-    return <LocalPwaManager forceOpen={forceOpen} onForceOpenChange={onForceOpenChange} />
+    return (
+      <LocalPwaManager
+        forceOpen={forceOpen}
+        onForceOpenChange={onForceOpenChange}
+        onApplyHandlerChange={onApplyHandlerChange}
+      />
+    )
   }
 
-  return <ProductionPwaManager forceOpen={forceOpen} onForceOpenChange={onForceOpenChange} />
+  return (
+    <ProductionPwaManager
+      forceOpen={forceOpen}
+      onForceOpenChange={onForceOpenChange}
+      onUpdateAvailable={onUpdateAvailable}
+      onApplyHandlerChange={onApplyHandlerChange}
+    />
+  )
 }

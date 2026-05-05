@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { Icon } from '@iconify/react'
 import lentLogo from '../assets/lentlogo.svg'
 import lentLogoDark from '../assets/lentlogo-dark.svg'
+import UpdateNotice from './UpdateNotice'
 import { ENT_AUTH_PREFIX } from '../entApi'
 
 const NOTES9_DOAUTH = 'https://notes9.iutlan.univ-rennes1.fr/services/doAuth.php?href=https://notes9.iutlan.univ-rennes1.fr/'
@@ -41,6 +42,8 @@ function Sidebar({
   onLogout,
   onAccountClick,
   favoritesSlotRef = null,
+  hasPendingUpdate = false,
+  onUpdateClick,
 }) {
   const [activeSection, setActiveSection] = useState('applications')
 
@@ -120,6 +123,7 @@ function Sidebar({
 
       <div className="flex flex-col gap-4 w-full">
         <div ref={favoritesSlotRef} className="sidebar-favorites-slot empty:hidden w-full" />
+        {hasPendingUpdate ? <UpdateNotice onUpdateClick={onUpdateClick} /> : null}
         {authenticated ? (
           <div aria-hidden="true" className="h-px w-full bg-border/70" />
         ) : null}

@@ -1,6 +1,6 @@
 export const ENT_ORIGIN = 'https://services-numeriques.univ-rennes.fr'
 const APP_BASE_URL = (() => {
-  const rawBaseUrl = String(import.meta.env.BASE_URL || '/').trim()
+  const rawBaseUrl = String(import.meta.env?.BASE_URL || '/').trim()
 
   if (!rawBaseUrl || rawBaseUrl === '/') {
     return ''
@@ -360,7 +360,71 @@ function normalizeScodocGroupLabel(label) {
     .trim()
 }
 
-function collectScodocGroupLabels(source, collector) {
+function normalizeScodocPartitionLabel(label) {
+  return normalizeScodocGroupLabel(label)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
+function getScodocGroupKindFromText(label) {
+  const normalizedLabel = normalizeScodocPartitionLabel(label)
+
+  if (!normalizedLabel) {
+    return null
+  }
+
+  if (/\btp\b/.test(normalizedLabel) || normalizedLabel.includes('travaux pratiques')) {
+    return 'tp'
+  }
+
+  if (/\btd\b/.test(normalizedLabel) || normalizedLabel.includes('travaux diriges')) {
+    return 'td'
+  }
+
+  return null
+}
+
+function inferScodocGroupKind(source, inheritedKind = null) {
+  if (!source || typeof source !== 'object') {
+    return inheritedKind
+  }
+
+  const candidates = [
+    source.partition_name,
+    source.partition?.partition_name,
+    source.partition?.name,
+    source.type,
+    source.kind,
+    source.category,
+    source.name,
+    source.label,
+  ]
+
+  for (const candidate of candidates) {
+    const kind = getScodocGroupKindFromText(candidate)
+    if (kind) {
+      return kind
+    }
+  }
+
+  return inheritedKind
+}
+
+function addScodocGroupCandidate(collector, label, kind = null) {
+  const normalizedLabel = normalizeScodocGroupLabel(label)
+
+  if (!normalizedLabel) {
+    return
+  }
+
+  collector.push({
+    label: normalizedLabel,
+    kind,
+  })
+}
+
+function collectScodocGroupCandidates(source, collector, inheritedKind = null) {
   if (!source) {
     return
   }
@@ -368,14 +432,12 @@ function collectScodocGroupLabels(source, collector) {
   if (Array.isArray(source)) {
     for (const item of source) {
       if (typeof item === 'string') {
-        const normalizedLabel = normalizeScodocGroupLabel(item)
-        if (normalizedLabel) {
-          collector.push(normalizedLabel)
-        }
+        addScodocGroupCandidate(collector, item, inheritedKind)
         continue
       }
 
       if (item && typeof item === 'object') {
+        const itemKind = inferScodocGroupKind(item, inheritedKind)
         const namedValue = [
           item.group_name,
           item.nom,
@@ -385,35 +447,48 @@ function collectScodocGroupLabels(source, collector) {
         ].find((value) => typeof value === 'string' && value.trim())
 
         if (namedValue) {
-          collector.push(normalizeScodocGroupLabel(namedValue))
+          addScodocGroupCandidate(collector, namedValue, itemKind)
         }
+
+        collectScodocGroupCandidates(item.children, collector, itemKind)
+        collectScodocGroupCandidates(item.groups, collector, itemKind)
+        collectScodocGroupCandidates(item.groupes, collector, itemKind)
       }
     }
     return
   }
 
   if (typeof source === 'object') {
+    const sourceKind = inferScodocGroupKind(source, inheritedKind)
+
+    if (typeof source.group_name === 'string' || typeof source.groupe === 'string') {
+      addScodocGroupCandidate(collector, source.group_name ?? source.groupe, sourceKind)
+    }
+
     for (const value of Object.values(source)) {
-      collectScodocGroupLabels(value, collector)
+      collectScodocGroupCandidates(value, collector, sourceKind)
     }
   }
 }
 
-function scoreScodocGroupLabel(label, kind) {
-  const normalizedLabel = normalizeScodocGroupLabel(label)
+function scoreScodocGroupCandidate(candidate, kind) {
+  const normalizedLabel = normalizeScodocGroupLabel(candidate?.label)
   const compactLabel = normalizedLabel.replace(/\s+/g, '').toUpperCase()
   const prefix = kind === 'td' ? 'TD' : 'TP'
+  let score = 0
 
-  if (!compactLabel.includes(prefix)) {
+  if (candidate?.kind === kind) {
+    score += 10
+  } else if (candidate?.kind) {
     return -1
   }
 
-  let score = 0
-
-  if (compactLabel.startsWith(prefix)) {
-    score += 6
-  } else {
-    score += 2
+  if (compactLabel.includes(prefix)) {
+    if (compactLabel.startsWith(prefix)) {
+      score += 6
+    } else {
+      score += 2
+    }
   }
 
   if (new RegExp(`\\b${prefix}\\b`, 'i').test(normalizedLabel)) {
@@ -424,41 +499,132 @@ function scoreScodocGroupLabel(label, kind) {
     score += 1
   }
 
-  return score
+  if (kind === 'tp' && /^\d+[A-Z]\d+$/i.test(compactLabel)) {
+    score += 4
+  }
+
+  return score > 0 ? score : -1
+}
+
+function addUniqueScodocAlias(aliases, value) {
+  const normalizedValue = normalizeScodocGroupLabel(value)
+
+  if (!normalizedValue) {
+    return
+  }
+
+  if (!aliases.some((alias) => normalizeScodocGroupLabel(alias).toLowerCase() === normalizedValue.toLowerCase())) {
+    aliases.push(normalizedValue)
+  }
+}
+
+function buildScodocGroupAliases(label, kind) {
+  const aliases = []
+  const normalizedLabel = normalizeScodocGroupLabel(label)
+  const compactLabel = normalizedLabel.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+
+  addUniqueScodocAlias(aliases, normalizedLabel)
+
+  const yearLetterTpMatch = compactLabel.match(/^(\d+)([A-Z])(\d+)$/)
+  if (yearLetterTpMatch) {
+    const [, year, tdLetter, tpNumber] = yearLetterTpMatch
+
+    if (kind === 'td') {
+      addUniqueScodocAlias(aliases, `${year}${tdLetter}`)
+      addUniqueScodocAlias(aliases, `TD ${tdLetter}`)
+      addUniqueScodocAlias(aliases, tdLetter)
+    } else {
+      addUniqueScodocAlias(aliases, `${year}${tdLetter}${tpNumber}`)
+      addUniqueScodocAlias(aliases, `${tdLetter}${tpNumber}`)
+      addUniqueScodocAlias(aliases, `TP ${tpNumber}`)
+    }
+
+    return aliases
+  }
+
+  const tdTpTextMatch = normalizedLabel.match(/\bTD\s*([A-Z0-9]+).*?\bTP\s*([A-Z0-9]+)\b/i)
+  if (tdTpTextMatch) {
+    if (kind === 'td') {
+      addUniqueScodocAlias(aliases, `TD ${tdTpTextMatch[1]}`)
+      addUniqueScodocAlias(aliases, tdTpTextMatch[1])
+    } else {
+      addUniqueScodocAlias(aliases, `TP ${tdTpTextMatch[2]}`)
+      addUniqueScodocAlias(aliases, tdTpTextMatch[2])
+    }
+  }
+
+  return aliases
+}
+
+function buildScodocTdAliasesFromTpLabel(label) {
+  const aliases = []
+  const normalizedLabel = normalizeScodocGroupLabel(label)
+  const compactLabel = normalizedLabel.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+  const yearLetterTpMatch = compactLabel.match(/^(\d+)([A-Z])(\d+)$/)
+
+  if (yearLetterTpMatch) {
+    const [, year, tdLetter] = yearLetterTpMatch
+    addUniqueScodocAlias(aliases, `${year}${tdLetter}`)
+    addUniqueScodocAlias(aliases, `TD ${tdLetter}`)
+    addUniqueScodocAlias(aliases, tdLetter)
+  }
+
+  const tdTpTextMatch = normalizedLabel.match(/\bTD\s*([A-Z0-9]+).*?\bTP\s*[A-Z0-9]+\b/i)
+  if (tdTpTextMatch) {
+    addUniqueScodocAlias(aliases, `TD ${tdTpTextMatch[1]}`)
+    addUniqueScodocAlias(aliases, tdTpTextMatch[1])
+  }
+
+  return aliases
 }
 
 export function detectScodocGroupSelection(gradesData = null) {
   const releve = getCurrentGradesReleve(gradesData)
-  const rawLabels = []
+  const rawCandidates = []
 
-  collectScodocGroupLabels(releve?.semestre?.groupes, rawLabels)
-  collectScodocGroupLabels(releve?.groupes, rawLabels)
-  collectScodocGroupLabels(releve?.rang_group, rawLabels)
+  collectScodocGroupCandidates(releve?.semestre?.groupes, rawCandidates)
+  collectScodocGroupCandidates(releve?.groupes, rawCandidates)
+  collectScodocGroupCandidates(releve?.rang_group, rawCandidates)
 
-  const labels = rawLabels.filter((value, index) => rawLabels.indexOf(value) === index)
-  let bestTdLabel = null
+  const labels = rawCandidates
+    .map((candidate) => candidate.label)
+    .filter((value, index, values) => values.indexOf(value) === index)
+  const candidates = rawCandidates.filter((candidate, index) => (
+    rawCandidates.findIndex((other) => (
+      other.label === candidate.label && other.kind === candidate.kind
+    )) === index
+  ))
+  let bestTdCandidate = null
   let bestTdScore = -1
-  let bestTpLabel = null
+  let bestTpCandidate = null
   let bestTpScore = -1
 
-  for (const label of labels) {
-    const tdScore = scoreScodocGroupLabel(label, 'td')
+  for (const candidate of candidates) {
+    const tdScore = scoreScodocGroupCandidate(candidate, 'td')
     if (tdScore > bestTdScore) {
       bestTdScore = tdScore
-      bestTdLabel = label
+      bestTdCandidate = candidate
     }
 
-    const tpScore = scoreScodocGroupLabel(label, 'tp')
+    const tpScore = scoreScodocGroupCandidate(candidate, 'tp')
     if (tpScore > bestTpScore) {
       bestTpScore = tpScore
-      bestTpLabel = label
+      bestTpCandidate = candidate
     }
   }
 
+  const tpAliases = bestTpScore >= 0 ? buildScodocGroupAliases(bestTpCandidate.label, 'tp') : []
+  const tdAliases = bestTdScore >= 0
+    ? buildScodocGroupAliases(bestTdCandidate.label, 'td')
+    : buildScodocTdAliasesFromTpLabel(bestTpCandidate?.label)
+
   return {
     labels,
-    tdLabel: bestTdScore >= 0 ? bestTdLabel : null,
-    tpLabel: bestTpScore >= 0 ? bestTpLabel : null,
+    candidates,
+    tdLabel: tdAliases[0] ?? null,
+    tpLabel: tpAliases[0] ?? null,
+    tdAliases,
+    tpAliases,
   }
 }
 

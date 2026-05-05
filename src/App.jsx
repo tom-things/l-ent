@@ -11,6 +11,7 @@ import OnboardingCompletionPage from './components/OnboardingCompletionPage'
 import PwaInstallPrompt from './components/PwaInstallPrompt'
 import OnboardingPage from './components/OnboardingPage'
 import PwaUpdateManager from './components/PwaUpdateManager'
+import UpdateNotice from './components/UpdateNotice'
 import { DEMO_CREDENTIALS } from './demoAccount'
 import { syncRuntimeSeo } from './seo'
 import {
@@ -366,6 +367,13 @@ function normalizeSelectionLabel(label) {
     .toLowerCase()
 }
 
+function normalizeSelectionCompactLabel(label) {
+  return normalizeSelectionLabel(label)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '')
+}
+
 function selectionLabelsMatch(left, right) {
   const normalizedLeft = normalizeSelectionLabel(left)
   const normalizedRight = normalizeSelectionLabel(right)
@@ -374,21 +382,44 @@ function selectionLabelsMatch(left, right) {
     return false
   }
 
+  const compactLeft = normalizeSelectionCompactLabel(left)
+  const compactRight = normalizeSelectionCompactLabel(right)
+  const canUseCompactSuffixMatch = compactLeft.length >= 3 && compactRight.length >= 3
+
   return normalizedLeft === normalizedRight
     || normalizedLeft.startsWith(`${normalizedRight} `)
     || normalizedRight.startsWith(`${normalizedLeft} `)
     || normalizedLeft.endsWith(` ${normalizedRight}`)
     || normalizedRight.endsWith(` ${normalizedLeft}`)
+    || (
+      compactLeft.length >= 2
+      && compactRight.length >= 2
+      && (
+        compactLeft === compactRight
+        || (
+          canUseCompactSuffixMatch
+          && (compactLeft.endsWith(compactRight) || compactRight.endsWith(compactLeft))
+        )
+      )
+    )
 }
 
-function findTpOptionByLabel(options, label) {
-  const normalizedLabel = normalizeSelectionLabel(label)
+function findTpOptionByLabel(options, labelOrLabels) {
+  const labels = Array.isArray(labelOrLabels) ? labelOrLabels : [labelOrLabels]
+  const normalizedLabels = labels.filter((label) => normalizeSelectionLabel(label))
 
-  if (!normalizedLabel) {
+  if (normalizedLabels.length === 0) {
     return null
   }
 
-  return (options ?? []).find((option) => selectionLabelsMatch(option?.label, label)) ?? null
+  for (const label of normalizedLabels) {
+    const match = (options ?? []).find((option) => selectionLabelsMatch(option?.label, label))
+    if (match) {
+      return match
+    }
+  }
+
+  return null
 }
 
 async function loadTdOptionsForAccountModal(yearOption) {
@@ -903,6 +934,15 @@ function App() {
   const [forceInstallPrompt, setForceInstallPrompt] = useState(false)
   const [forceIosPrompt, setForceIosPrompt] = useState(false)
   const [forceUpdatePrompt, setForceUpdatePrompt] = useState(false)
+  const [hasPendingUpdate, setHasPendingUpdate] = useState(false)
+  const applyUpdateRef = useRef(null)
+  const handleApplyUpdate = useCallback(async () => {
+    if (applyUpdateRef.current) {
+      await applyUpdateRef.current()
+    } else {
+      window.location.reload()
+    }
+  }, [])
   const [debugNextClass, setDebugNextClass] = useState(false)
   const usernameInputRef = useRef(null)
   const [credentials, setCredentials] = useState({
@@ -1298,7 +1338,12 @@ function App() {
               : "Aucun groupe de TD n'a été trouvé pour le moment.",
           }
 
-          const autoDetectedTd = findTpOptionByLabel(detectedYearStep.options, scodocGroupSelection?.tdLabel)
+          const autoDetectedTd = findTpOptionByLabel(
+            detectedYearStep.options,
+            scodocGroupSelection?.tdAliases?.length
+              ? scodocGroupSelection.tdAliases
+              : scodocGroupSelection?.tdLabel,
+          )
 
           if (autoDetectedTd?.resourceId) {
             const detectedTdTreeResponse = await getAdeTree(autoDetectedTd.resourceId)
@@ -1308,7 +1353,12 @@ function App() {
               return
             }
 
-            const autoDetectedTp = findTpOptionByLabel(detectedTdStep.options, scodocGroupSelection?.tpLabel)
+            const autoDetectedTp = findTpOptionByLabel(
+              detectedTdStep.options,
+              scodocGroupSelection?.tpAliases?.length
+                ? scodocGroupSelection.tpAliases
+                : scodocGroupSelection?.tpLabel,
+            )
             const autoStoredSelection = buildStoredTpSelection(
               nextTpOnboardingState.program,
               detectedYear,
@@ -2203,6 +2253,8 @@ function App() {
             onLogout={handleHeaderAction}
             onAccountClick={handleOpenAccountModal}
             favoritesSlotRef={setFavoritesSlotEl}
+            hasPendingUpdate={hasPendingUpdate}
+            onUpdateClick={handleApplyUpdate}
           />
           <div className="flex flex-col flex-1 min-w-0 4xl:h-screen 4xl:overflow-y-auto">
             <div className="4xl:hidden">
@@ -2213,6 +2265,11 @@ function App() {
                 onAccountAction={handleOpenAccountModal}
               />
             </div>
+            {hasPendingUpdate ? (
+              <div className="4xl:hidden px-10 pt-4 max-xl:px-6 max-md:px-4">
+                <UpdateNotice onUpdateClick={handleApplyUpdate} />
+              </div>
+            ) : null}
             {sessionState.warning ? (
               <div className="px-10 pt-4 max-xl:px-6 max-md:px-4 4xl:pt-10">
                 <div className="flex items-start gap-3 rounded-[20px] border border-[#f2cf8f] bg-[#fff7e8] px-4 py-3 text-text shadow-[0_10px_30px_rgba(0,0,0,0.05)] dark:border-[#6a4d15] dark:bg-[#2f2410]">
@@ -2261,7 +2318,12 @@ function App() {
         planningState={accountModalPlanningState}
       />
       <PwaInstallPrompt forceShow={forceInstallPrompt || forceIosPrompt} forceIos={forceIosPrompt} />
-      <PwaUpdateManager forceOpen={forceUpdatePrompt} onForceOpenChange={setForceUpdatePrompt} />
+      <PwaUpdateManager
+        forceOpen={forceUpdatePrompt}
+        onForceOpenChange={setForceUpdatePrompt}
+        onUpdateAvailable={() => setHasPendingUpdate(true)}
+        onApplyHandlerChange={(fn) => { applyUpdateRef.current = fn }}
+      />
 
       {DEBUG_MENU_ENABLED && debugOpen ? (
         <aside className="fixed top-4 right-4 bottom-4 w-[min(720px,calc(100vw-2rem))] flex flex-col gap-3 p-4 bg-context-bg text-text border border-border rounded-[20px] shadow-[0_24px_80px_var(--color-shadow)] backdrop-blur-[10px] overflow-y-auto overflow-x-hidden overscroll-contain z-30 max-lg:top-3 max-lg:right-3 max-lg:left-3 max-lg:bottom-3 max-lg:w-auto" role="dialog" aria-modal="false" aria-label="Menu debug">
@@ -2367,6 +2429,13 @@ function App() {
                 onClick={() => setForceUpdatePrompt(true)}
               >
                 PWA Update Prompt
+              </button>
+              <button
+                type="button"
+                className={`appearance-none border border-border rounded-[12px] text-text py-[0.7rem] px-[0.9rem] font-inherit font-semibold leading-[1.1] ${hasPendingUpdate ? 'bg-brand text-bg' : 'bg-bg'}`}
+                onClick={() => setHasPendingUpdate((current) => !current)}
+              >
+                Sidebar update {hasPendingUpdate ? '✓' : ''}
               </button>
               <button
                 type="button"
