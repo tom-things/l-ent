@@ -42,39 +42,144 @@ function getGreetingSubtitle(date = new Date()) {
 
   const messages = {
     lundi: {
-      morning: ['On démarre.', 'Nouveau lundi.', 'C\u2019est parti.', 'Lundi matin.'],
-      afternoon: ['Lundi file.', 'Bon rythme.', 'On tient bon.', 'Cap maintenu.'],
-      evening: ['Lundi plié.', 'Premier jour ok.', 'Lundi bouclé.', 'Bonne soirée.'],
+      morning: [
+        'Nouveau lundi, on démarre tranquillement la semaine.',
+        'C\u2019est reparti pour cinq jours, prends ton café.',
+        'Lundi matin, rien ne sert de courir trop vite.',
+        'Une nouvelle semaine commence, à toi de jouer.',
+      ],
+      afternoon: [
+        'Lundi avance bien, garde un bon rythme.',
+        'L\u2019après-midi file, on tient bon jusqu\u2019au bout.',
+        'Belle cadence pour un lundi, continue comme ça.',
+        'Cap maintenu, la semaine est bien lancée.',
+      ],
+      evening: [
+        'Premier jour bouclé, tu peux souffler un peu.',
+        'Lundi plié, le plus dur est derrière toi.',
+        'Bonne soirée, profite avant de recommencer demain.',
+        'Une journée de moins, encore quatre à venir.',
+      ],
     },
     mardi: {
-      morning: ['Mardi démarre.', 'On enchaîne.', 'Bonne énergie.', 'Mardi matin.'],
-      afternoon: ['Mardi roule.', 'Belle cadence.', 'Bien lancé.', 'On continue.'],
-      evening: ['Mardi bouclé.', 'Deux jours faits.', 'Bonne soirée.', 'Mardi rangé.'],
+      morning: [
+        'Mardi démarre, on enchaîne avec la même énergie.',
+        'Deuxième round, tu as déjà pris le pli.',
+        'Bonne énergie pour ce mardi, tout va bien.',
+        'Encore un matin, encore une occasion d\u2019avancer.',
+      ],
+      afternoon: [
+        'Mardi roule, belle cadence à garder jusqu\u2019au bout.',
+        'L\u2019après-midi est bien lancée, on continue.',
+        'Tu tiens un bon rythme, ne lâche rien maintenant.',
+        'Le mardi passe vite quand on est dedans.',
+      ],
+      evening: [
+        'Mardi bouclé, deux jours déjà derrière toi.',
+        'Bonne soirée, la semaine prend forme tranquillement.',
+        'Mardi rangé, repose-toi un peu maintenant.',
+        'Le tiers de la semaine est passé, bravo.',
+      ],
     },
     mercredi: {
-      morning: ['Mi-semaine.', 'Mercredi léger.', 'À mi-chemin.', 'On garde le fil.'],
-      afternoon: ['Mercredi roule.', 'Cap franchi.', 'On continue.', 'Belle dynamique.'],
-      evening: ['Mi-semaine ok.', 'On souffle.', 'Mercredi calme.', 'Le pire est fait.'],
+      morning: [
+        'Mi-semaine, tu es pile au milieu du gué.',
+        'Mercredi matin, le plus dur est derrière toi.',
+        'À mi-chemin, garde le fil sans te brusquer.',
+        'Mercredi léger, profite de ce petit répit bien mérité.',
+      ],
+      afternoon: [
+        'Mercredi roule, le cap est franchi proprement.',
+        'Belle dynamique aujourd\u2019hui, on garde le tempo.',
+        'L\u2019après-midi avance bien, continue ainsi.',
+        'Encore quelques heures et la pente descend.',
+      ],
+      evening: [
+        'Mi-semaine ok, le pire est officiellement passé.',
+        'On souffle un peu, demain c\u2019est la descente.',
+        'Mercredi calme, savoure cette petite pause.',
+        'La deuxième moitié de semaine commence bientôt.',
+      ],
     },
     jeudi: {
-      morning: ['Jeudi matin.', 'On y est presque.', 'Avant-dernier.', 'Bonne énergie.'],
-      afternoon: ['Jeudi avance.', 'Le bout approche.', 'On garde le cap.', 'Bientôt fini.'],
-      evening: ['Jeudi rangé.', 'Presque au bout.', 'Plus qu\u2019un jour.', 'Bonne soirée.'],
+      morning: [
+        'Jeudi matin, tu es presque au bout de la semaine.',
+        'Avant-dernier jour, l\u2019énergie est encore là.',
+        'Plus qu\u2019un effort, le week-end pointe son nez.',
+        'Bonne énergie pour ce jeudi, ça avance fort.',
+      ],
+      afternoon: [
+        'Jeudi avance, le bout du tunnel approche.',
+        'On garde le cap, demain c\u2019est vendredi.',
+        'L\u2019après-midi file, plus très loin maintenant.',
+        'Encore un peu de patience, ça paye toujours.',
+      ],
+      evening: [
+        'Jeudi rangé, plus qu\u2019une journée à tenir.',
+        'Presque au bout, la lumière est en vue.',
+        'Bonne soirée, demain ça sent déjà le week-end.',
+        'Un dernier dodo et c\u2019est vendredi enfin.',
+      ],
     },
     vendredi: {
-      morning: ['Vendredi !', 'Dernier jour.', 'Bel élan.', 'Week-end en vue.'],
-      afternoon: ['Presque libre.', 'Dernière ligne.', 'Week-end proche.', 'Bientôt fini.'],
-      evening: ['Souffle mérité.', 'Semaine pliée.', 'Week-end !', 'Bien joué.'],
+      morning: [
+        'Vendredi enfin, dernier jour de la semaine.',
+        'Bel élan, le week-end est à portée de main.',
+        'Dernier round, donne tout ce qu\u2019il te reste.',
+        'Vendredi matin, l\u2019odeur du week-end approche.',
+      ],
+      afternoon: [
+        'Presque libre, encore quelques heures à tenir.',
+        'Dernière ligne droite, le week-end est tout proche.',
+        'Bientôt fini, garde l\u2019énergie jusqu\u2019au bout.',
+        'L\u2019après-midi file, on aperçoit déjà le repos.',
+      ],
+      evening: [
+        'Semaine pliée, ton week-end commence maintenant.',
+        'Souffle mérité, profite bien de chaque minute.',
+        'Week-end enfin, tu l\u2019as bien gagné.',
+        'Bien joué, la coupure est officiellement ouverte.',
+      ],
     },
     samedi: {
-      morning: ['Samedi tranquille.', 'Pas de pression.', 'Week-end !', 'À ton rythme.'],
-      afternoon: ['Profite bien.', 'Samedi doux.', 'Bon week-end.', 'À ton tempo.'],
-      evening: ['Soirée tranquille.', 'On décompresse.', 'Samedi calme.', 'Bonne soirée.'],
+      morning: [
+        'Samedi tranquille, aucune pression à avoir aujourd\u2019hui.',
+        'Week-end installé, prends le temps qu\u2019il te faut.',
+        'Samedi matin, savoure cette grasse matinée.',
+        'À ton rythme, la journée t\u2019appartient totalement.',
+      ],
+      afternoon: [
+        'Profite bien, l\u2019après-midi t\u2019appartient.',
+        'Samedi doux, fais ce qui te fait plaisir.',
+        'Bon week-end, recharge à fond les batteries.',
+        'À ton tempo, rien d\u2019obligatoire aujourd\u2019hui.',
+      ],
+      evening: [
+        'Soirée tranquille, le week-end continue calmement.',
+        'On décompresse, demain c\u2019est encore week-end.',
+        'Samedi calme, savoure ce moment pour toi.',
+        'Bonne soirée, profite sans culpabiliser.',
+      ],
     },
     dimanche: {
-      morning: ['Dimanche doux.', 'Prends ton temps.', 'Tranquille.', 'Bonne grasse mat\u2019.'],
-      afternoon: ['On recharge.', 'Dimanche calme.', 'Savoure bien.', 'Profite.'],
-      evening: ['On prépare lundi.', 'Demain reparti.', 'Bonne soirée.', 'On recharge.'],
+      morning: [
+        'Dimanche doux, prends vraiment ton temps ce matin.',
+        'Grasse matinée méritée, savoure-la sans remords.',
+        'Dimanche tranquille, aucune urgence à l\u2019horizon.',
+        'Réveil en douceur, la journée est à toi.',
+      ],
+      afternoon: [
+        'On recharge tranquillement avant la semaine.',
+        'Dimanche calme, profite encore un peu.',
+        'Savoure bien, il reste quelques heures de répit.',
+        'Profite à fond, demain on repart pour cinq jours.',
+      ],
+      evening: [
+        'On prépare doucement lundi, sans se presser.',
+        'Demain reparti, mais ce soir reste tranquille.',
+        'Bonne soirée, fais le plein avant la reprise.',
+        'On recharge une dernière fois pour la semaine.',
+      ],
     },
   }
 
@@ -99,7 +204,7 @@ function WidgetContainer({
 }) {
   const displayName = userName?.trim() || ' '
   const greetingSubtitle = greeting ?? getGreetingSubtitle()
-  const [weatherState, setWeatherState] = useState(INITIAL_WEATHER_STATE)
+  const [, setWeatherState] = useState(INITIAL_WEATHER_STATE)
   const [hasWeatherLoaded, setHasWeatherLoaded] = useState(false)
   const [areWidgetsVisible, setAreWidgetsVisible] = useState(false)
   const [isWeatherLoading, setIsWeatherLoading] = useState(true)
@@ -192,13 +297,6 @@ function WidgetContainer({
     return () => window.removeEventListener('keydown', handleEscape)
   }, [isLocationPickerOpen, isWeatherLoading])
 
-  const handleOpenLocationPicker = useCallback(() => {
-    const suggestedLocation = getEditableLocationLabel(weatherState.location)
-    setLocationQuery(suggestedLocation)
-    setLocationError('')
-    setIsLocationPickerOpen(true)
-  }, [weatherState.location])
-
   const handleCloseLocationPicker = useCallback(() => {
     setIsLocationPickerOpen(false)
     setLocationError('')
@@ -241,11 +339,11 @@ function WidgetContainer({
 
   return (
     <section className="w-full grid gap-8 pt-6 px-10 pb-10 max-md:px-4 max-md:pt-4 max-md:pb-8 max-md:gap-6" aria-label="Widgets">
-      <div className="flex flex-wrap gap-5 items-stretch max-2xl:gap-[14px] max-md:gap-[10px] overflow-hidden p-2 -m-2">
+      <div className="flex flex-wrap gap-5 items-stretch max-2xl:gap-[14px] max-md:gap-[10px] overflow-visible p-2 -m-2">
         <article className={`widget-card shadow-md flex-[0_1_240px] h-[148px] p-5 border border-white rounded-[1.75rem] overflow-hidden bg-widget-bg text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-[min(240px,100%)] max-md:min-h-[132px] max-md:h-auto max-md:p-4 max-md:rounded-3xl max-xs:flex-[1_1_calc(50%-5px)] max-xs:min-w-0 flex flex-col justify-end gap-[6px] text-text ${areWidgetsVisible ? 'widget-card-visible delay-[80ms]' : ''}`}>
           <Icon icon="ph:hand-waving" className="greeting-icon w-10 h-10 text-inherit shrink-0 max-md:w-[34px] max-md:h-[34px]" aria-hidden="true" />
           <h2 className="m-0 leading-[1.06] text-2xl font-bold whitespace-nowrap max-md:overflow-hidden max-md:text-ellipsis max-md:text-[22px]" title={`Salut ${displayName} !`}>Salut {displayName} !</h2>
-          <p className="m-0 leading-[1.06] text-base font-medium whitespace-nowrap overflow-hidden text-ellipsis max-md:whitespace-normal max-md:line-clamp-2 max-md:leading-[1.2] max-md:text-[15px]" title={greetingSubtitle}>{greetingSubtitle}</p>
+          <p className="m-0 leading-[1.2] text-[15px] font-medium line-clamp-2 max-md:text-[15px]" title={greetingSubtitle}>{greetingSubtitle}</p>
         </article>
 
         {!hideNextClass && (establishment === 'iutlan' || debugNextClass) ? (

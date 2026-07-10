@@ -766,6 +766,130 @@
   }
 }
 
+/* Disabled grade feature */
+
+.grade-feature-disabled,
+.latest-grade-widget.grade-feature-disabled:hover,
+.average-grade-widget.grade-feature-disabled:hover,
+.sidebar-grade-pocket.grade-feature-disabled:hover {
+  background: #f4f4f4;
+  color: #111111;
+  border-color: rgba(17, 17, 17, 0.16);
+  cursor: not-allowed;
+  overflow: visible;
+}
+
+.grade-feature-disabled .grade-disabled-content {
+  filter: grayscale(1) blur(4px);
+  opacity: 0.32;
+  pointer-events: none;
+  user-select: none;
+}
+
+.grade-disabled-pill {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 20;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  max-width: calc(100% - 32px);
+  padding: 6px 13px;
+  border: 1px solid rgba(17, 17, 17, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #111111;
+  box-shadow: 0 10px 24px rgba(17, 17, 17, 0.12);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+
+.grade-disabled-hover-note {
+  position: absolute;
+  left: var(--grade-tooltip-x, 50%);
+  top: var(--grade-tooltip-y, 0px);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: min(320px, calc(100vw - 32px));
+  padding: 9px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(17, 17, 17, 0.94);
+  color: #ffffff;
+  box-shadow: 0 14px 30px rgba(17, 17, 17, 0.2);
+  opacity: 0;
+  transform: translate(-50%, 10px) scale(0.98);
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    visibility 160ms ease;
+}
+
+.grade-feature-disabled:hover .grade-disabled-hover-note,
+.grade-feature-disabled:focus-visible .grade-disabled-hover-note {
+  opacity: 1;
+  transform: translate(-50%, 14px) scale(1);
+  visibility: visible;
+}
+
+.grade-feature-disabled:hover,
+.grade-feature-disabled:focus-visible {
+  z-index: 999;
+}
+
+.grade-disabled-hover-title {
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.grade-disabled-hover-detail {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: rgba(255, 255, 255, 0.76);
+  letter-spacing: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .grade-feature-disabled,
+  .latest-grade-widget.grade-feature-disabled:hover,
+  .average-grade-widget.grade-feature-disabled:hover,
+  .sidebar-grade-pocket.grade-feature-disabled:hover {
+    background: #151515;
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .grade-disabled-pill {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.92);
+    color: #111111;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  }
+
+  .grade-disabled-hover-note {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(245, 245, 245, 0.94);
+    color: #111111;
+  }
+
+  .grade-disabled-hover-detail {
+    color: rgba(17, 17, 17, 0.68);
+  }
+}
+
 /* ── Sidebar favorites: vertical list ── */
 
 .favorites-bar--sidebar > div:not(:first-child) {

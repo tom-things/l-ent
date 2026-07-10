@@ -32,6 +32,7 @@ import {
   normalizeDemoState,
   searchDemoAdeTree,
 } from './src/demoAccount.js'
+import { GRADES_UNAVAILABLE_MESSAGE } from './src/gradeFeatureState.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -46,7 +47,6 @@ const CAS_ORIGIN = 'https://sso-cas.univ-rennes.fr'
 const ADE_ORIGIN = 'https://campus-app.univ-rennes.fr'
 const MOODLE_ORIGIN = 'https://foad.univ-rennes.fr'
 const MOODLE_SHIBBOLETH_LOGIN_URL = `${MOODLE_ORIGIN}/auth/shibboleth/index.php`
-const NOTES9_ORIGIN = 'https://notes9.iutlan.univ-rennes1.fr'
 const RENNES_WAYF_ENTITY_ID = 'urn:mace:cru.fr:federation:univ-rennes1.fr'
 const DEFAULT_REFERER = `${ENT_ORIGIN}/f/services/normal/render.uP`
 const LOCAL_SESSION_COOKIE = 'ent_front_session'
@@ -681,53 +681,6 @@ async function performEntLogin({ username, password }) {
     layout: layout.data,
     redirectChain: [...loginPageResult.chain, ...portalRedirectResult.chain],
   }
-}
-
-async function ensureNotes9Session(jar) {
-  const doAuthUrl = `${NOTES9_ORIGIN}/services/doAuth.php?href=${encodeURIComponent(`${NOTES9_ORIGIN}/`)}`
-  await followRedirectChain(doAuthUrl, jar, {
-    headers: { Accept: 'text/html,application/xhtml+xml,*/*' },
-  })
-}
-
-function isNotes9StudentPicImage(picture) {
-  return picture.ok && /^image\//i.test(picture.contentType) && picture.size > 0
-}
-
-async function requestNotes9StudentPic(jar) {
-  const pictureResponse = await fetchWithJar(`${NOTES9_ORIGIN}/services/data.php?q=getStudentPic`, jar, {
-    headers: {
-      Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-      Referer: `${NOTES9_ORIGIN}/`,
-    },
-    redirect: 'follow',
-  })
-
-  const contentType = pictureResponse.headers.get('content-type') ?? 'application/octet-stream'
-  const buffer = Buffer.from(await pictureResponse.arrayBuffer())
-
-  return {
-    ok: pictureResponse.ok,
-    status: pictureResponse.status,
-    contentType,
-    size: buffer.length,
-    buffer,
-  }
-}
-
-async function fetchNotes9StudentPic(jar) {
-  await ensureNotes9Session(jar)
-
-  let picture = await requestNotes9StudentPic(jar)
-
-  if (isNotes9StudentPicImage(picture)) {
-    return picture
-  }
-
-  await ensureNotes9Session(jar)
-  picture = await requestNotes9StudentPic(jar)
-
-  return picture
 }
 
 function buildEntProxyTargetUrl(requestUrl) {
@@ -2050,7 +2003,7 @@ app.get('/__ent_auth/launch', async (req, res) => {
   }
 })
 
-// 6. Grades Endpoint (IUT Lannion — notes9)
+// 6. Grades Endpoint (IUT Lannion, temporarily disabled)
 app.get('/__ent_auth/grades', async (req, res) => {
   try {
     res.setHeader('Cache-Control', 'no-store')
@@ -2060,44 +2013,15 @@ app.get('/__ent_auth/grades', async (req, res) => {
       return res.status(200).json({ authenticated: false, grades: null })
     }
 
-    if (isDemoSession(session)) {
-      const gradesData = buildDemoGradesPayload()
-      setCachedGrades(session.id, gradesData)
-      setSessionCookie(res, session)
-      return res.status(200).json({
-        authenticated: true,
-        sessionMode: DEMO_SESSION_MODE,
-        grades: gradesData,
-      })
-    }
-
-    const cachedGrades = getCachedGrades(session.id)
-    if (cachedGrades) {
-      setSessionCookie(res, session)
-      return res.status(200).json({
-        authenticated: true,
-        sessionMode: session.mode ?? null,
-        grades: cachedGrades,
-      })
-    }
-
-    await ensureNotes9Session(session.jar)
-
-    // Fetch all grades data in one request (auth + semesters + first relevé)
-    const dataUrl = `${NOTES9_ORIGIN}/services/data.php?q=dataPremi%C3%A8reConnexion`
-    const dataResponse = await fetchWithJar(dataUrl, session.jar, {
-      headers: { Accept: 'application/json, */*', Referer: `${NOTES9_ORIGIN}/` },
-      redirect: 'follow',
-    })
-    const dataText = await dataResponse.text()
-    let gradesData = null
-    try { gradesData = JSON.parse(dataText) } catch { gradesData = dataText }
+    const gradesData = getCachedGrades(session.id) ?? buildDemoGradesPayload()
 
     setCachedGrades(session.id, gradesData)
     setSessionCookie(res, session)
     res.status(200).json({
       authenticated: true,
-      sessionMode: session.mode ?? null,
+      sessionMode: isDemoSession(session) ? DEMO_SESSION_MODE : (session.mode ?? null),
+      disabled: true,
+      unavailableMessage: GRADES_UNAVAILABLE_MESSAGE,
       grades: gradesData,
     })
   } catch (error) {
@@ -2117,7 +2041,7 @@ app.get('/__ent_auth/student-pic', async (req, res) => {
         return res.status(200).json({
           authenticated: false,
           available: false,
-          source: 'notes9',
+          source: 'profile-photo',
           previewUrl: null,
         })
       }
@@ -2127,56 +2051,25 @@ app.get('/__ent_auth/student-pic', async (req, res) => {
       })
     }
 
-    if (isDemoSession(session)) {
-      setSessionCookie(res, session)
-      if (wantsMeta) {
-        return res.status(200).json({
-          authenticated: true,
-          sessionMode: DEMO_SESSION_MODE,
-          available: false,
-          source: 'demo',
-          previewUrl: null,
-        })
-      }
-
-      return res.status(404).json({
-        available: false,
-        source: 'demo',
-      })
-    }
-
-    const picture = await fetchNotes9StudentPic(session.jar)
-    const isImage = isNotes9StudentPicImage(picture)
-
     setSessionCookie(res, session)
     res.setHeader('Cache-Control', 'no-store')
 
     if (wantsMeta) {
       return res.status(200).json({
         authenticated: true,
-        sessionMode: session.mode ?? null,
-        available: picture.ok && isImage,
-        source: 'notes9',
-        contentType: picture.contentType,
-        size: picture.size,
-        status: picture.status,
-        previewUrl: picture.ok && isImage ? '/__ent_auth/student-pic' : null,
-      })
-    }
-
-    if (!picture.ok || !isImage) {
-      return res.status(404).json({
+        sessionMode: isDemoSession(session) ? DEMO_SESSION_MODE : (session.mode ?? null),
         available: false,
-        source: 'notes9',
-        contentType: picture.contentType,
-        status: picture.status,
+        source: isDemoSession(session) ? 'demo' : 'profile-photo',
+        previewUrl: null,
+        message: GRADES_UNAVAILABLE_MESSAGE,
       })
     }
 
-    res.setHeader('Cache-Control', 'no-store')
-    res.setHeader('Content-Type', picture.contentType)
-    res.setHeader('Content-Length', String(picture.size))
-    res.status(200).end(picture.buffer)
+    return res.status(404).json({
+      available: false,
+      source: isDemoSession(session) ? 'demo' : 'profile-photo',
+      message: GRADES_UNAVAILABLE_MESSAGE,
+    })
   } catch (error) {
     if (req.query.meta === '1') {
       return res.status(500).json({

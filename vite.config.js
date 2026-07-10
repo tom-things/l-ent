@@ -32,13 +32,13 @@ import {
   normalizeDemoState,
   searchDemoAdeTree,
 } from './src/demoAccount.js'
+import { GRADES_UNAVAILABLE_MESSAGE } from './src/gradeFeatureState.js'
 
 const ENT_ORIGIN = 'https://services-numeriques.univ-rennes.fr'
 const CAS_ORIGIN = 'https://sso-cas.univ-rennes.fr'
 const ADE_ORIGIN = 'https://campus-app.univ-rennes.fr'
 const MOODLE_ORIGIN = 'https://foad.univ-rennes.fr'
 const MOODLE_SHIBBOLETH_LOGIN_URL = `${MOODLE_ORIGIN}/auth/shibboleth/index.php`
-const NOTES9_ORIGIN = 'https://notes9.iutlan.univ-rennes1.fr'
 const RENNES_WAYF_ENTITY_ID = 'urn:mace:cru.fr:federation:univ-rennes1.fr'
 const DEFAULT_REFERER = `${ENT_ORIGIN}/f/services/normal/render.uP`
 const LOCAL_SESSION_COOKIE = 'ent_front_session'
@@ -1526,53 +1526,6 @@ const {
   fetchPlanningTimetableFromRpc,
 })
 
-async function ensureNotes9Session(jar) {
-  const doAuthUrl = `${NOTES9_ORIGIN}/services/doAuth.php?href=${encodeURIComponent(`${NOTES9_ORIGIN}/`)}`
-  await followRedirectChain(doAuthUrl, jar, {
-    headers: { Accept: 'text/html,application/xhtml+xml,*/*' },
-  })
-}
-
-function isNotes9StudentPicImage(picture) {
-  return picture.ok && /^image\//i.test(picture.contentType) && picture.size > 0
-}
-
-async function requestNotes9StudentPic(jar) {
-  const pictureResponse = await fetchWithJar(`${NOTES9_ORIGIN}/services/data.php?q=getStudentPic`, jar, {
-    headers: {
-      Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-      Referer: `${NOTES9_ORIGIN}/`,
-    },
-    redirect: 'follow',
-  })
-
-  const contentType = pictureResponse.headers.get('content-type') ?? 'application/octet-stream'
-  const buffer = Buffer.from(await pictureResponse.arrayBuffer())
-
-  return {
-    ok: pictureResponse.ok,
-    status: pictureResponse.status,
-    contentType,
-    size: buffer.length,
-    buffer,
-  }
-}
-
-async function fetchNotes9StudentPic(jar) {
-  await ensureNotes9Session(jar)
-
-  let picture = await requestNotes9StudentPic(jar)
-
-  if (isNotes9StudentPicImage(picture)) {
-    return picture
-  }
-
-  await ensureNotes9Session(jar)
-  picture = await requestNotes9StudentPic(jar)
-
-  return picture
-}
-
 function createEntDevAuthPlugin() {
   const attachMiddlewares = (middlewares) => {
     middlewares.use('/__ent_auth/session', async (req, res, next) => {
@@ -2136,35 +2089,14 @@ function createEntDevAuthPlugin() {
           return
         }
 
-        if (isDemoSession(session)) {
-          setSessionCookie(res, session)
-          sendJson(res, 200, {
-            authenticated: true,
-            sessionMode: DEMO_SESSION_MODE,
-            grades: buildDemoGradesPayload(),
-          })
-          return
-        }
-
-        await ensureNotes9Session(session.jar)
-
-        // Fetch all grades data in one request (auth + semesters + first relevé)
-        const dataUrl = `${NOTES9_ORIGIN}/services/data.php?q=dataPremi%C3%A8reConnexion`
-        const dataResponse = await fetchWithJar(dataUrl, session.jar, {
-          headers: { Accept: 'application/json, */*', Referer: `${NOTES9_ORIGIN}/` },
-          redirect: 'follow',
-        })
-        const dataText = await dataResponse.text()
-        let gradesData = null
-        try { gradesData = JSON.parse(dataText) } catch { gradesData = dataText }
-
-        // Debug: log Notes9 response to help diagnose grade fetching issues
-        const hasReleve = typeof gradesData === 'object' && gradesData !== null && 'relevé' in gradesData
-        console.log(`[grades] Notes9 response: status=${dataResponse.status}, hasRelevé=${hasReleve}, keys=${typeof gradesData === 'object' && gradesData !== null ? Object.keys(gradesData).join(',') : typeof gradesData}`)
+        const gradesData = buildDemoGradesPayload()
+        setSessionCookie(res, session)
 
         sendJson(res, 200, {
           authenticated: true,
-          sessionMode: session.mode ?? null,
+          sessionMode: isDemoSession(session) ? DEMO_SESSION_MODE : (session.mode ?? null),
+          disabled: true,
+          unavailableMessage: GRADES_UNAVAILABLE_MESSAGE,
           grades: gradesData,
         })
       } catch (error) {
@@ -2188,66 +2120,32 @@ function createEntDevAuthPlugin() {
           sendJson(res, 200, {
             authenticated: false,
             available: false,
-            source: 'notes9',
+            source: 'profile-photo',
             previewUrl: null,
           })
           return
         }
 
-        if (isDemoSession(session)) {
-          setSessionCookie(res, session)
-
-          if (wantsMeta) {
-            sendJson(res, 200, {
-              authenticated: true,
-              sessionMode: DEMO_SESSION_MODE,
-              available: false,
-              source: 'demo',
-              previewUrl: null,
-            })
-            return
-          }
-
-          sendJson(res, 404, {
-            available: false,
-            source: 'demo',
-          })
-          return
-        }
-
-        const picture = await fetchNotes9StudentPic(session.jar)
-        const isImage = isNotes9StudentPicImage(picture)
+        setSessionCookie(res, session)
         res.setHeader('Cache-Control', 'no-store')
 
         if (wantsMeta) {
           sendJson(res, 200, {
             authenticated: true,
-            sessionMode: session.mode ?? null,
-            available: picture.ok && isImage,
-            source: 'notes9',
-            contentType: picture.contentType,
-            size: picture.size,
-            status: picture.status,
-            previewUrl: picture.ok && isImage ? '/__ent_auth/student-pic' : null,
-          })
-          return
-        }
-
-        if (!picture.ok || !isImage) {
-          sendJson(res, 404, {
+            sessionMode: isDemoSession(session) ? DEMO_SESSION_MODE : (session.mode ?? null),
             available: false,
-            source: 'notes9',
-            contentType: picture.contentType,
-            status: picture.status,
+            source: isDemoSession(session) ? 'demo' : 'profile-photo',
+            previewUrl: null,
+            message: GRADES_UNAVAILABLE_MESSAGE,
           })
           return
         }
 
-        res.statusCode = 200
-        res.setHeader('Cache-Control', 'no-store')
-        res.setHeader('Content-Type', picture.contentType)
-        res.setHeader('Content-Length', String(picture.size))
-        res.end(picture.buffer)
+        sendJson(res, 404, {
+          available: false,
+          source: isDemoSession(session) ? 'demo' : 'profile-photo',
+          message: GRADES_UNAVAILABLE_MESSAGE,
+        })
       } catch (error) {
         sendJson(res, 500, {
           error: error instanceof Error ? error.message : String(error),

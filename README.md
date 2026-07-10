@@ -14,7 +14,7 @@ Le portail ENT de l'Université de Rennes expose les données étudiantes (notes
 
 ## Fonctionnalités
 
-- Affichage de la moyenne générale, moyenne de promo et dernière note (Notes9)
+- Affichage temporairement désactivé de la moyenne générale, moyenne de promo et dernière note
 - Prochain cours et planning via ADE Campus et Planning GWT
 - Accès aux 30+ applications universitaires avec recherche et favoris
 - Météo locale (Open-Meteo)
@@ -65,7 +65,7 @@ Le serveur Express écoute sur le port `3000` (configurable via `PORT`).
 ## Sécurité & confidentialité
 
 - l'ent ne maintient pas de base de données applicative dédiée pour stocker les comptes étudiants.
-- Les données sont récupérées à la demande depuis les services de l'Université de Rennes : CAS, ENT, ADE, Planning et Notes9.
+- Les données sont récupérées à la demande depuis les services de l'Université de Rennes : CAS, ENT, ADE et Planning.
 - Les identifiants ENT ne sont pas stockés côté navigateur et ne sont pas sérialisés dans le cookie de session.
 - Pour conserver la compatibilité avec ADE, les identifiants peuvent être gardés temporairement en mémoire côté serveur pendant la session active, puis supprimés à la déconnexion ou à l'expiration de session.
 - Les caches sensibles côté client sont vidés à la déconnexion et lors d'un échec de rafraîchissement de session.
@@ -108,7 +108,7 @@ l'ent communique avec les systèmes suivants :
 - **Portail ENT** : layout, portlets, marketplace
 - **ADE Campus** : emploi du temps (sessions chiffrées)
 - **Planning** : planning détaillé via GWT RPC
-- **Notes9** : notes et moyennes
+- **Notes** : fonctionnalité temporairement désactivée
 - **Open-Meteo** : météo (API libre)
 
 ## Contribution

@@ -411,6 +411,22 @@ function getAppCategory(title = '') {
   return null
 }
 
+function isUnavailableGradeApplication(application = {}) {
+  const haystack = [
+    application.id,
+    application.fname,
+    application.title,
+    application.name,
+    application.description,
+    application.href,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  return haystack.includes('notes') && (haystack.includes('lannion') || haystack.includes('iutlan'))
+}
+
 function normalizeAllServices(bootstrap) {
   const layoutData = bootstrap?.layout?.data
   if (!isRecord(layoutData)) {
@@ -430,7 +446,7 @@ function normalizeAllServices(bootstrap) {
           portalNodeId: getPortalNodeId(service, metadata),
         })
 
-        if (!app) {
+        if (!app || isUnavailableGradeApplication(app)) {
           continue
         }
 
@@ -783,6 +799,7 @@ function AvailableApplications({
 
   const favoriteApplications = useMemo(() => {
     const entFavorites = getFavoriteApplications(viewState.sections)
+      .filter((application) => !isUnavailableGradeApplication(application))
     const pinnedLocalServices = allServices.filter(
       (service) => isLocalService(service) && localPins.includes(getApplicationKey(service)),
     )
@@ -928,12 +945,6 @@ function AvailableApplications({
 
         if (establishment === 'iutlan') {
           services.unshift({
-            id: 'lent-iutlan-notes9',
-            title: 'Notes IUT Lannion',
-            description: 'Consulter ses notes et résultats',
-            href: toNavigableHref('https://notes9.iutlan.univ-rennes1.fr/services/doAuth.php?href=https://notes9.iutlan.univ-rennes1.fr/'),
-            target: '_blank',
-          }, {
             id: 'lent-iutlan-loxya',
             title: 'Loxya',
             description: 'Location de matériel audiovisuel',
@@ -945,7 +956,7 @@ function AvailableApplications({
         const nextLaunchTargets = await resolveLaunchTargets([
           ...getFavoriteApplications(sections.sections),
           ...services,
-        ])
+        ].filter((application) => !isUnavailableGradeApplication(application)))
         if (isCancelled) {
           return
         }

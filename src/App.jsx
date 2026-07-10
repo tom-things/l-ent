@@ -52,7 +52,7 @@ import {
 
 const DEFAULT_REQUEST_PATH = '/api/v4-3/dlm/layout.json'
 const DEBUG_MENU_ENABLED = import.meta.env.DEV
-const ACCOUNT_MODAL_NOTES9_TIMEOUT_MS = 3000
+const ACCOUNT_MODAL_PROFILE_PHOTO_TIMEOUT_MS = 3000
 const ONBOARDING_COMPLETION_SCREEN_MS = 1000
 const LEGACY_SESSION_CACHE_KEY = 'l-ent:session-cache'
 const LOCAL_STORAGE_ACCOUNT_KEYS = [ESTABLISHMENT_KEY, STUDENT_TP_KEY]
@@ -550,7 +550,7 @@ async function buildAccountModalPlanningState(selection) {
   })
 }
 
-async function resolveAccountProfilePhoto(account, { timeoutMs = ACCOUNT_MODAL_NOTES9_TIMEOUT_MS } = {}) {
+async function resolveAccountProfilePhoto(account, { timeoutMs = ACCOUNT_MODAL_PROFILE_PHOTO_TIMEOUT_MS } = {}) {
   const fallbackPhotoSrc = findProfilePhotoCandidate(account)?.src ?? null
   let timeoutId = null
 
@@ -589,16 +589,8 @@ function resolveDebugImagePreviewFromSnapshot(snapshot) {
   if (data?.available && data?.previewUrl) {
     return {
       src: appendDebugPreviewToken(data.previewUrl, token),
-      fieldPath: 'notes9.services.data.php?q=getStudentPic',
-      kind: data.source ?? 'notes9',
-    }
-  }
-
-  if (data?.notes9?.available && data?.notes9?.previewUrl) {
-    return {
-      src: appendDebugPreviewToken(data.notes9.previewUrl, token),
-      fieldPath: 'notes9.services.data.php?q=getStudentPic',
-      kind: data.notes9.source ?? 'notes9',
+      fieldPath: 'student-pic',
+      kind: data.source ?? 'profile-photo',
     }
   }
 
@@ -1293,7 +1285,7 @@ function App() {
         let scodocGroupSelection = null
         try {
           const gradesResponse = await getGrades()
-          if (gradesResponse?.authenticated) {
+          if (gradesResponse?.authenticated && !gradesResponse?.disabled) {
             scodocGroupSelection = detectScodocGroupSelection(gradesResponse.grades)
           }
         } catch {
@@ -2093,23 +2085,23 @@ function App() {
 
       try {
         profilePictureInfo = await getStudentProfilePictureMeta()
-      } catch (notes9Error) {
+      } catch (profilePhotoError) {
         profilePictureInfo = {
           available: false,
-          source: 'notes9',
-          error: getErrorMessage(notes9Error),
+          source: 'profile-photo',
+          error: getErrorMessage(profilePhotoError),
         }
       }
 
-      const notes9PreviewUrl = profilePictureInfo?.available && profilePictureInfo?.previewUrl
+      const profilePreviewUrl = profilePictureInfo?.available && profilePictureInfo?.previewUrl
         ? `${profilePictureInfo.previewUrl}${profilePictureInfo.previewUrl.includes('?') ? '&' : '?'}ts=${Date.now()}`
         : null
 
-      if (notes9PreviewUrl) {
+      if (profilePreviewUrl) {
         setDebugImagePreview({
-          src: notes9PreviewUrl,
-          fieldPath: 'notes9.services.data.php?q=getStudentPic',
-          kind: 'notes9',
+          src: profilePreviewUrl,
+          fieldPath: 'student-pic',
+          kind: profilePictureInfo.source ?? 'profile-photo',
         })
 
         commitDebugState('Photo profil', profilePictureInfo)
@@ -2127,7 +2119,7 @@ function App() {
       } : null)
 
       commitDebugState('Photo profil', {
-        notes9: profilePictureInfo,
+        profilePicture: profilePictureInfo,
         authenticated: accountResponse?.authenticated ?? false,
         photo: photoCandidate ? {
           available: true,

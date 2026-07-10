@@ -46,7 +46,7 @@ const ASSETS = {
     ["Moodle", path.join(ROOT, "src", "assets", "app_icons", "uni_rennes", "moodle.png")],
     ["Messagerie", path.join(ROOT, "src", "assets", "app_icons", "uni_rennes", "messagerie.png")],
     ["Microsoft 365", path.join(ROOT, "src", "assets", "app_icons", "uni_rennes", "microsoft-365.png")],
-    ["Notes", path.join(ROOT, "src", "assets", "app_icons", "uni_rennes", "iutlan-notes9.png")],
+    ["Notes", path.join(ROOT, "src", "assets", "app_icons", "uni_rennes", "dossier-etudiant.png")],
     ["Annuaire", path.join(ROOT, "src", "assets", "app_icons", "uni_rennes", "annuaire.png")],
     ["Sésame", path.join(ROOT, "src", "assets", "app_icons", "uni_rennes", "sesame.png")],
     ["Stockage", path.join(ROOT, "src", "assets", "app_icons", "uni_rennes", "espaces-stockage.png")],
@@ -493,7 +493,7 @@ async function slideProblem(presentation) {
     bold: true,
     face: FONTS.display,
   });
-  addText(slide, "Entre l'ENT, ADE, Notes9 et les dizaines d'applications satellites, l'étudiant change sans cesse de repère, de logique et d'interface.", {
+  addText(slide, "Entre l'ENT, ADE, les notes et les dizaines d'applications satellites, l'étudiant change sans cesse de repère, de logique et d'interface.", {
     left: 78,
     top: 330,
     width: 520,
@@ -583,7 +583,7 @@ async function slideProblem(presentation) {
     align: "center",
     autoFit: null,
   });
-  addText(slide, "Notes9", {
+  addText(slide, "Notes", {
     left: 612,
     top: 940,
     width: 106,
@@ -667,7 +667,7 @@ async function slideSolution(presentation) {
     height: 250,
     accent: COLORS.lime,
     title: "Pilotage",
-    body: "Moyenne générale, moyenne de promo et dernière note remontent dans la même vue au lieu d'obliger à ouvrir Notes9 séparément.",
+    body: "Moyenne générale, moyenne de promo et dernière note restent visibles en aperçu démo pendant la maintenance de la fonctionnalité.",
   });
   addCard(slide, {
     left: 450,
@@ -1063,7 +1063,7 @@ async function slideArchitecture(presentation) {
     bold: true,
     face: FONTS.display,
   });
-  addText(slide, "Frontend React 19, backend Express 5, PWA installable et intégrations réelles avec CAS, ENT, ADE, Planning, Notes9 et Open-Meteo.", {
+  addText(slide, "Frontend React 19, backend Express 5, PWA installable et intégrations réelles avec CAS, ENT, ADE, Planning et Open-Meteo.", {
     left: 78,
     top: 304,
     width: 700,
@@ -1098,7 +1098,7 @@ async function slideArchitecture(presentation) {
     { left: 390, top: 560, width: 196, height: 82, label: "l'ent", fill: COLORS.aqua },
     { left: 390, top: 704, width: 196, height: 82, label: "CAS / ENT", fill: COLORS.paper },
     { left: 132, top: 848, width: 196, height: 82, label: "ADE / Planning", fill: COLORS.paper },
-    { left: 390, top: 848, width: 196, height: 82, label: "Notes9", fill: COLORS.paper },
+    { left: 390, top: 848, width: 196, height: 82, label: "Notes", fill: COLORS.paper },
   ];
 
   for (const box of flowBoxes) {

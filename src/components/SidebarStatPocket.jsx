@@ -11,41 +11,51 @@ function SidebarStatPocket({
   ariaLabel,
   tooltipPrimary,
   tooltipSecondary,
+  disabled = false,
 }) {
-  const gradient = accentHue != null
+  const gradient = !disabled && accentHue != null
     ? `linear-gradient(180deg, hsla(${accentHue}, 60%, 72%, 0.28) 0%, transparent 70%)`
     : 'none'
-  const gradientDark = accentHue != null
+  const gradientDark = !disabled && accentHue != null
     ? `linear-gradient(180deg, hsla(${accentHue}, 45%, 22%, 0.55) 0%, transparent 70%)`
     : 'none'
   const hasTooltip = Boolean(tooltipPrimary || tooltipSecondary)
+  const handleClick = (event) => {
+    if (disabled) {
+      event.preventDefault()
+      return
+    }
+
+    onClick?.(event)
+  }
 
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={handleClick}
       style={{
         '--grade-gradient': gradient,
         '--grade-gradient-dark': gradientDark,
       }}
-      className="sidebar-grade-pocket group relative flex flex-col items-start gap-[10px] flex-1 min-w-0 px-[14px] py-[12px] border border-white dark:border-[rgba(255,255,255,0.08)] rounded-[22px] shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] text-text cursor-pointer transition-[transform,box-shadow] duration-150 ease-in-out hover:shadow-[0_6px_10px_-1px_rgba(0,0,0,0.12),0_3px_6px_-2px_rgba(0,0,0,0.12)]"
+      className={`sidebar-grade-pocket group relative flex flex-col items-start gap-[10px] flex-1 min-w-0 px-[14px] py-[12px] border rounded-[22px] shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-2px_rgba(0,0,0,0.1)] transition-[transform,box-shadow] duration-150 ease-in-out ${disabled ? 'grade-feature-disabled' : 'border-white dark:border-[rgba(255,255,255,0.08)] text-text cursor-pointer hover:shadow-[0_6px_10px_-1px_rgba(0,0,0,0.12),0_3px_6px_-2px_rgba(0,0,0,0.12)]'}`}
       aria-label={ariaLabel}
+      aria-disabled={disabled ? 'true' : undefined}
+      title={disabled ? tooltipPrimary : undefined}
     >
       <div className="flex items-center gap-[5px] min-w-0 max-w-full">
-        <Icon icon={icon} className="w-[17px] h-[17px] shrink-0 text-text" aria-hidden="true" />
-        <span className="m-0 min-w-0 leading-[1.06] text-base font-medium text-text overflow-hidden text-ellipsis whitespace-nowrap">
+        <Icon icon={icon} className="w-[17px] h-[17px] shrink-0" aria-hidden="true" />
+        <span className="m-0 min-w-0 leading-[1.06] text-base font-medium overflow-hidden text-ellipsis whitespace-nowrap">
           {label}
         </span>
       </div>
       <div className="flex flex-col items-start gap-[2px] min-w-0 max-w-full">
         <div className="flex items-end gap-[3px] leading-[1.06]">
-          <span className="text-[37px] font-bold leading-none whitespace-nowrap text-text">{value}</span>
-          <span className="text-[19px] font-medium leading-[1.06] whitespace-nowrap pb-[3px] text-text">/{max}</span>
+          <span className="text-[37px] font-bold leading-none whitespace-nowrap">{value}</span>
+          <span className="text-[19px] font-medium leading-[1.06] whitespace-nowrap pb-[3px]">/{max}</span>
         </div>
         {caption ? (
           <span
-            className="block min-w-0 max-w-full leading-[1.06] text-base font-medium text-text overflow-hidden text-ellipsis whitespace-nowrap"
-            title={caption}
+            className="block min-w-0 max-w-full leading-[1.06] text-base font-medium overflow-hidden text-ellipsis whitespace-nowrap"
           >
             {caption}
           </span>
