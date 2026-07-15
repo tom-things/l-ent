@@ -169,7 +169,7 @@ function getTimeRemainingLabel(startStr, endStr) {
   }
 
   const diffMins = Math.round(diffMs / 60000)
-  if (diffMins < 60) return `Dans ${diffMins} min${diffMins > 1 ? 's' : ''}`
+  if (diffMins < 60) return `Dans ${diffMins} min`
 
   if (diffMins < 24 * 60) {
     const hours = Math.floor(diffMins / 60)
@@ -180,7 +180,7 @@ function getTimeRemainingLabel(startStr, endStr) {
 
   const diffDays = Math.floor(diffMins / (24 * 60))
   if (diffDays < 7) {
-    return `Dans ${diffDays} j`
+    return `Dans ${diffDays} jour${diffDays > 1 ? 's' : ''}`
   }
 
   return `Le ${new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' }).format(start)}`
@@ -340,32 +340,34 @@ function getStatusCopy(widgetState) {
     case 'loading':
       return {
         title: 'Recherche du prochain cours...',
-        body: 'On charge ton planning en direct.',
+        body: 'Chargement du planning',
         icon: 'carbon:search',
       }
     case 'unconfigured':
       return {
         title: 'Groupe manquant',
-        body: 'Choisis ton TD ou ton TP dans ton compte pour afficher le prochain cours.',
+        body: 'Choisis ton groupe TD ou TP dans « Mon compte ».',
         icon: 'carbon:user-multiple',
       }
     case 'limited':
       return {
         title: 'Planning partiel',
-        body: 'Le flux planning renvoie des données incomplètes pour le moment. Le prochain cours n’a pas pu être confirmé.',
+        body: 'Les données reçues sont incomplètes pour le moment.',
         icon: 'carbon:warning-alt',
+        action: 'Ouvrir l\'emploi du temps',
       }
     case 'empty':
       return {
         title: 'Aucun cours à venir',
         body: `Rien de prévu dans les ${NEXT_CLASS_LOOKAHEAD_DAYS} prochains jours.`,
-        icon: 'carbon:calendar',
+        action: 'Ouvrir l\'emploi du temps',
       }
     case 'paused':
       return {
         title: 'Synchroniser le planning',
-        body: 'Ouvre ADE depuis cette carte pour mettre à jour le prochain cours sans lancer de synchro automatique.',
+        body: 'Ouvre l\'emploi du temps depuis cette carte pour mettre à jour le prochain cours.',
         icon: 'carbon:calendar-settings',
+        action: 'Ouvrir l\'emploi du temps',
       }
     case 'error':
       return {
@@ -573,13 +575,20 @@ function WidgetNextClass({
         return
       }
 
-      loadedEventsRef.current = []
-      loadedCompleteRef.current = true
       lastRefreshAtRef.current = Date.now()
-      setWidgetState(createWidgetState({
-        status: 'error',
-        errorMessage: getWidgetErrorMessage(error),
-      }))
+      setWidgetState((current) => {
+        // A failed background refresh keeps the class already on screen.
+        if (background && current.status === 'ready' && current.nextClass) {
+          return current
+        }
+
+        loadedEventsRef.current = []
+        loadedCompleteRef.current = true
+        return createWidgetState({
+          status: 'error',
+          errorMessage: getWidgetErrorMessage(error),
+        })
+      })
     } finally {
       if (abortControllerRef.current === controller) {
         abortControllerRef.current = null
@@ -767,9 +776,14 @@ function WidgetNextClass({
   const exactDateLabel = formatExactDateLabel(nextClass?.start)
   const shouldShowExactDateTooltip = Boolean(exactDateLabel && timeLabel && timeLabel !== 'En cours')
   const statusCopy = getStatusCopy(widgetState)
+  const isStatusWide = ['unconfigured', 'limited', 'empty', 'paused', 'error'].includes(widgetState.status)
   const openAdePlanning = useCallback(() => {
     window.open(ADE_HREF, '_blank', 'noopener,noreferrer')
   }, [])
+  const handleRetry = useCallback((event) => {
+    event.stopPropagation()
+    void loadNextClass()
+  }, [loadNextClass])
   const handleKeyDown = useCallback((event) => {
     if (event.key !== 'Enter' && event.key !== ' ') {
       return
@@ -781,7 +795,7 @@ function WidgetNextClass({
 
   return (
     <article
-      className={`next-class-widget widget-card relative z-0 hover:z-10 shadow-md flex-[0_1_190px] h-[148px] p-5 border border-white rounded-[1.75rem] overflow-visible text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-[min(320px,100%)] max-md:h-[140px] max-md:p-4 max-md:rounded-3xl max-xs:flex-[1_1_100%] max-xs:min-w-0 flex flex-col gap-[6px] text-text cursor-pointer ${wide ? '2xl:flex-[0_1_380px]' : ''} ${visible ? 'widget-card-visible delay-[80ms]' : ''}`}
+      className={`next-class-widget widget-card relative z-0 hover:z-10 shadow-md flex-[0_1_190px] h-[148px] p-5 border border-white rounded-[1.75rem] overflow-visible text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-[min(320px,100%)] max-md:h-[140px] max-md:p-4 max-md:rounded-3xl max-xs:flex-[1_1_100%] max-xs:min-w-0 flex flex-col gap-[6px] text-text cursor-pointer ${wide ? '2xl:flex-[0_1_380px]' : isStatusWide ? '2xl:flex-[0_1_300px]' : ''} ${visible ? 'widget-card-visible delay-[80ms]' : ''}`}
       style={{ '--class-gradient': classGradient, '--class-gradient-dark': classGradientDark }}
       aria-label="Prochain cours, ouvrir ADE"
       onClick={openAdePlanning}
@@ -853,13 +867,31 @@ function WidgetNextClass({
             </div>
           </>
         ) : (
-          <div className="flex-1 flex flex-col justify-center gap-2 py-1">
-            <div className="flex items-center gap-[7px]">
-              <Icon icon={statusCopy.icon} className="w-[18px] h-[18px] shrink-0 opacity-70" aria-hidden="true" />
-              <span className="m-0 leading-[1.06] text-base font-bold max-md:text-[15px]">{statusCopy.title}</span>
+          <div className="flex-1 flex flex-col justify-center gap-1 py-1 min-w-0">
+            <div className="flex items-center gap-[7px] min-w-0">
+              {statusCopy.icon ? (
+                <Icon icon={statusCopy.icon} className="w-[18px] h-[18px] shrink-0 opacity-70" aria-hidden="true" />
+              ) : null}
+              <span className="m-0 min-w-0 leading-[1.1] text-base font-bold overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[15px]" title={statusCopy.title}>{statusCopy.title}</span>
             </div>
             {statusCopy.body ? (
-              <p className="m-0 text-base leading-6 opacity-70 max-md:text-[15px] line-clamp-2">{statusCopy.body}</p>
+              <p className="m-0 text-sm leading-[1.35] opacity-70 line-clamp-2" title={statusCopy.body}>{statusCopy.body}</p>
+            ) : null}
+            {widgetState.status === 'error' ? (
+              <button
+                type="button"
+                className="self-start inline-flex items-center gap-[5px] min-h-[26px] px-[10px] border border-border-input rounded-full bg-bg-input text-text text-[13px] font-semibold leading-none transition-[background-color] duration-[120ms] ease-in-out hover:bg-bg-subtle"
+                onClick={handleRetry}
+                onKeyDown={(event) => event.stopPropagation()}
+              >
+                <Icon icon="carbon:restart" className="w-[13px] h-[13px] shrink-0" aria-hidden="true" />
+                Réessayer
+              </button>
+            ) : statusCopy.action ? (
+              <span className="inline-flex items-center gap-1 text-[13px] font-semibold opacity-80">
+                {statusCopy.action}
+                <Icon icon="carbon:arrow-up-right" className="w-[13px] h-[13px] shrink-0" aria-hidden="true" />
+              </span>
             ) : null}
           </div>
         )}

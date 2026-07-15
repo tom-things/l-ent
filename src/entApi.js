@@ -1,3 +1,5 @@
+import { GRADES_UNAVAILABLE_MESSAGE } from './gradeFeatureState'
+
 export const ENT_ORIGIN = 'https://services-numeriques.univ-rennes.fr'
 const APP_BASE_URL = (() => {
   const rawBaseUrl = String(import.meta.env?.BASE_URL || '/').trim()
@@ -298,13 +300,19 @@ const GRADES_CACHE_KEY = 'l-ent:grades-cache'
 export async function getGrades({ force = false } = {}) {
   void force
 
-  const response = await fetch(`${ENT_AUTH_PREFIX}/grades`, {
-    credentials: 'same-origin',
-  })
+  try {
+    const response = await fetch(`${ENT_AUTH_PREFIX}/grades`, {
+      credentials: 'same-origin',
+    })
 
-  const data = await parseJsonPayload(response)
-
-  return data
+    return await parseJsonPayload(response)
+  } catch (error) {
+    return {
+      authenticated: false,
+      grades: null,
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
 }
 
 export async function getStudentProfilePictureMeta() {
@@ -628,23 +636,39 @@ export function detectScodocGroupSelection(gradesData = null) {
   }
 }
 
+function resolveGradesReleve(data) {
+  if (data?.error) {
+    return { error: String(data.error) }
+  }
+
+  if (!data?.authenticated) {
+    return { error: 'Non connecté. Connecte-toi pour accéder aux notes.' }
+  }
+
+  if (data?.disabled) {
+    return {
+      error: data.unavailableMessage || GRADES_UNAVAILABLE_MESSAGE,
+      disabled: true,
+    }
+  }
+
+  const releve = getCurrentGradesReleve(data.grades)
+  if (!releve) {
+    return { error: 'Aucun relevé disponible.' }
+  }
+
+  return { releve }
+}
+
 export async function getAverageGrade() {
   const data = await getGrades()
 
-  if (!data.authenticated) {
-    return { error: 'Non connecté.' }
+  const resolved = resolveGradesReleve(data)
+  if (resolved.error) {
+    return resolved
   }
 
-  const releve = data.grades?.['relevé']
-  if (!releve) return { error: 'Aucun relevé disponible.' }
-
-  // Use the current semester's relevé (last in the semestres list)
-  const semestres = data.grades?.semestres
-  let currentReleve = releve
-  if (semestres && Array.isArray(semestres) && semestres.length > 0) {
-    const latest = semestres[semestres.length - 1]
-    if (latest?.['relevé']) currentReleve = latest['relevé']
-  }
+  const currentReleve = resolved.releve
 
   // Collect all graded entries from ressources and saes
   const allGrades = []
@@ -732,12 +756,12 @@ export async function getAverageGrade() {
 export async function getLatestGrade() {
   const data = await getGrades()
 
-  if (!data.authenticated) {
-    return { error: 'Non connecté. Veuillez vous connecter pour accéder aux notes.' }
+  const resolved = resolveGradesReleve(data)
+  if (resolved.error) {
+    return resolved
   }
 
-  const releve = data.grades?.['relevé']
-  if (!releve) return { error: 'Aucun relevé disponible.' }
+  const releve = resolved.releve
 
   let latest = null
 

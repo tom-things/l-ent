@@ -1,5 +1,10 @@
 import SidebarStatPocket from './SidebarStatPocket'
-import { DEMO_AVERAGE_GRADE, GRADES_UNAVAILABLE_MESSAGE } from '../gradeFeatureState'
+import {
+  DEMO_AVERAGE_GRADE,
+  GRADES_UNAVAILABLE_DETAIL,
+  GRADES_UNAVAILABLE_MESSAGE,
+  GRADES_UNAVAILABLE_TITLE,
+} from '../gradeFeatureState'
 
 function SidebarAveragePocket() {
   const averageDisplay = String(parseFloat(DEMO_AVERAGE_GRADE.average))
@@ -13,7 +18,8 @@ function SidebarAveragePocket() {
       max="20"
       caption={`Promo : ${promoDisplay}`}
       ariaLabel={`Moyenne indisponible: ${GRADES_UNAVAILABLE_MESSAGE}`}
-      tooltipPrimary={GRADES_UNAVAILABLE_MESSAGE}
+      tooltipPrimary={GRADES_UNAVAILABLE_TITLE}
+      tooltipSecondary={GRADES_UNAVAILABLE_DETAIL}
       disabled
     />
   )

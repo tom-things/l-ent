@@ -127,4 +127,4 @@ Toute version modifiée déployée publiquement doit rendre son code source disp
 
 ## Crédits
 
-Fait par [@tom-things](https://github.com/tom-things) avec l'envie de simplifier la vie des étudiants <3
+Fait par [@tom-things](https://github.com/tom-things)

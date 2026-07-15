@@ -2139,12 +2139,12 @@ function App() {
   }, [commitDebugState])
 
   const sessionLabel = sessionState.checking
-    ? 'Verification de session...'
+    ? 'Vérification de session...'
     : sessionState.authenticated
       ? sessionState.user
-        ? `Connecte: ${sessionState.user}`
-        : 'Connecte'
-      : 'Deconnecte'
+        ? `Connecté : ${sessionState.user}`
+        : 'Connecté'
+      : 'Déconnecté'
 
   const output = prettyPrint(
     debugState.payload
@@ -2154,7 +2154,7 @@ function App() {
   const debugPanelTitle = debugOutputTab === 'storage' ? 'Stockage local' : (debugState.label || 'Sortie JSON')
   const debugPanelDescription = debugOutputTab === 'storage'
     ? 'Clés locales liées au compte, aux réglages et aux caches de l’app.'
-    : 'Sortie JSON brute des appels locaux et proxifies.'
+    : 'Sortie JSON brute des appels locaux et proxifiés.'
   const debugPanelOutput = debugOutputTab === 'storage' ? localStorageOutput : output
   const resolvedDebugImagePreview = resolveDebugImagePreviewFromSnapshot(debugState.payload) ?? debugImagePreview
   const handleCopyDebugOutput = useCallback(async () => {
@@ -2247,6 +2247,7 @@ function App() {
             favoritesSlotRef={setFavoritesSlotEl}
             hasPendingUpdate={hasPendingUpdate}
             onUpdateClick={handleApplyUpdate}
+            establishment={establishment}
           />
           <div className="flex flex-col flex-1 min-w-0 4xl:h-screen 4xl:overflow-y-auto">
             <div className="4xl:hidden">

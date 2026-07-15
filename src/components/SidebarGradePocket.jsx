@@ -1,5 +1,10 @@
 import SidebarStatPocket from './SidebarStatPocket'
-import { DEMO_LATEST_GRADE, GRADES_UNAVAILABLE_MESSAGE } from '../gradeFeatureState'
+import {
+  DEMO_LATEST_GRADE,
+  GRADES_UNAVAILABLE_DETAIL,
+  GRADES_UNAVAILABLE_MESSAGE,
+  GRADES_UNAVAILABLE_TITLE,
+} from '../gradeFeatureState'
 
 function SidebarGradePocket() {
   const grade = DEMO_LATEST_GRADE
@@ -16,7 +21,8 @@ function SidebarGradePocket() {
       max={noteMax}
       caption={gradeName}
       ariaLabel={`Dernière note indisponible: ${GRADES_UNAVAILABLE_MESSAGE}`}
-      tooltipPrimary={GRADES_UNAVAILABLE_MESSAGE}
+      tooltipPrimary={GRADES_UNAVAILABLE_TITLE}
+      tooltipSecondary={GRADES_UNAVAILABLE_DETAIL}
       disabled
     />
   )

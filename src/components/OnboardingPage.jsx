@@ -303,8 +303,8 @@ function OnboardingPage({
               </h1>
               <p className="text-lg font-medium leading-[1.2] text-text-muted m-0 font-body max-sm:text-base">
                 {contextLabel
-                  ? `On t'a retrouvé dans ${contextLabel}. On va maintenant descendre jusqu'à ton groupe exact.`
-                  : "On va maintenant descendre jusqu'à ton groupe exact pour afficher l'emploi du temps le plus précis."}
+                  ? `Tu es bien dans ${contextLabel}. Il ne reste plus qu'à choisir ton groupe exact.`
+                  : "Il ne reste plus qu'à choisir ton groupe exact pour afficher l'emploi du temps le plus précis."}
               </p>
             </div>
 

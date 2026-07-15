@@ -24,7 +24,7 @@ function LoginPage({
   }
 
   return (
-    <section className="flex w-full min-h-screen bg-bg" aria-label="Login page">
+    <section className="flex w-full min-h-screen bg-bg" aria-label="Page de connexion">
       <div
         className="login-left-panel flex-[0_0_min(529px,47vw)] max-w-[529px] min-w-0 min-h-screen flex flex-col justify-between items-start overflow-hidden max-4xl:hidden max-3xl:flex-[0_0_44vw] max-3xl:max-w-[529px]"
         style={{ background: 'linear-gradient(180deg, #F8FFA1 -13.62%, #ACF600 7.46%, #CDFFF5 25.93%, #F5F3ED 42.37%), #F5F3ED' }}
@@ -118,7 +118,7 @@ function LoginPage({
             <div className="grid gap-2">
               <h2 className="m-0 text-text text-[46px] font-bold leading-[0.95] max-3xl:text-[40px] max-md:text-[36px]">Connexion</h2>
               <p className="m-0 text-text text-base font-medium leading-[1.06] font-body max-3xl:text-[17px] max-md:text-[15px]">
-                Utilise tes codes fournis par ton établissement d'enseignement supérieur
+                Connecte-toi avec les identifiants fournis par ton établissement
               </p>
             </div>
           </div>

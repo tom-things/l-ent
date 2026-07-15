@@ -77,13 +77,13 @@ function getGreetingSubtitle(date = new Date()) {
       evening: [
         'Mardi bouclé, deux jours déjà derrière toi.',
         'Bonne soirée, la semaine prend forme tranquillement.',
-        'Mardi rangé, repose-toi un peu maintenant.',
-        'Le tiers de la semaine est passé, bravo.',
+        'Mardi terminé, repose-toi un peu maintenant.',
+        'Deux jours de faits, plus que trois avant le week-end.',
       ],
     },
     mercredi: {
       morning: [
-        'Mi-semaine, tu es pile au milieu du gué.',
+        'Mi-semaine, la moitié du chemin est déjà faite.',
         'Mercredi matin, le plus dur est derrière toi.',
         'À mi-chemin, garde le fil sans te brusquer.',
         'Mercredi léger, profite de ce petit répit bien mérité.',
@@ -95,7 +95,7 @@ function getGreetingSubtitle(date = new Date()) {
         'Encore quelques heures et la pente descend.',
       ],
       evening: [
-        'Mi-semaine ok, le pire est officiellement passé.',
+        'Mercredi bouclé, la semaine bascule du bon côté.',
         'On souffle un peu, demain c\u2019est la descente.',
         'Mercredi calme, savoure cette petite pause.',
         'La deuxième moitié de semaine commence bientôt.',
@@ -115,7 +115,7 @@ function getGreetingSubtitle(date = new Date()) {
         'Encore un peu de patience, ça paye toujours.',
       ],
       evening: [
-        'Jeudi rangé, plus qu\u2019une journée à tenir.',
+        'Jeudi plié, plus qu\u2019une journée à tenir.',
         'Presque au bout, la lumière est en vue.',
         'Bonne soirée, demain ça sent déjà le week-end.',
         'Un dernier dodo et c\u2019est vendredi enfin.',
@@ -138,7 +138,7 @@ function getGreetingSubtitle(date = new Date()) {
         'Semaine pliée, ton week-end commence maintenant.',
         'Souffle mérité, profite bien de chaque minute.',
         'Week-end enfin, tu l\u2019as bien gagné.',
-        'Bien joué, la coupure est officiellement ouverte.',
+        'Bien joué, tu peux débrancher jusqu’à lundi.',
       ],
     },
     samedi: {
@@ -340,10 +340,10 @@ function WidgetContainer({
   return (
     <section className="w-full grid gap-8 pt-6 px-10 pb-10 max-md:px-4 max-md:pt-4 max-md:pb-8 max-md:gap-6" aria-label="Widgets">
       <div className="flex flex-wrap gap-5 items-stretch max-2xl:gap-[14px] max-md:gap-[10px] overflow-visible p-2 -m-2">
-        <article className={`widget-card shadow-md flex-[0_1_240px] h-[148px] p-5 border border-white rounded-[1.75rem] overflow-hidden bg-widget-bg text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-[min(240px,100%)] max-md:min-h-[132px] max-md:h-auto max-md:p-4 max-md:rounded-3xl max-xs:flex-[1_1_calc(50%-5px)] max-xs:min-w-0 flex flex-col justify-end gap-[6px] text-text ${areWidgetsVisible ? 'widget-card-visible delay-[80ms]' : ''}`}>
-          <Icon icon="ph:hand-waving" className="greeting-icon w-10 h-10 text-inherit shrink-0 max-md:w-[34px] max-md:h-[34px]" aria-hidden="true" />
-          <h2 className="m-0 leading-[1.06] text-2xl font-bold whitespace-nowrap max-md:overflow-hidden max-md:text-ellipsis max-md:text-[22px]" title={`Salut ${displayName} !`}>Salut {displayName} !</h2>
-          <p className="m-0 leading-[1.2] text-[15px] font-medium line-clamp-2 max-md:text-[15px]" title={greetingSubtitle}>{greetingSubtitle}</p>
+        <article className={`widget-card shadow-md flex-[0_1_240px] min-h-[148px] p-5 border border-white rounded-[1.75rem] overflow-hidden bg-widget-bg text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-[min(240px,100%)] max-md:min-h-[132px] max-md:p-4 max-md:rounded-3xl max-xs:flex-[1_1_calc(50%-5px)] max-xs:min-w-0 flex flex-col justify-end gap-1 text-text ${areWidgetsVisible ? 'widget-card-visible delay-[80ms]' : ''}`}>
+          <Icon icon="ph:hand-waving" className="greeting-icon w-[34px] h-[34px] text-inherit shrink-0" aria-hidden="true" />
+          <h2 className="m-0 min-w-0 leading-[1.15] text-2xl font-bold overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[22px]" title={`Salut ${displayName} !`}>Salut {displayName} !</h2>
+          <p className="m-0 leading-[1.2] text-[15px] font-medium line-clamp-2" title={greetingSubtitle}>{greetingSubtitle}</p>
         </article>
 
         {!hideNextClass && (establishment === 'iutlan' || debugNextClass) ? (
