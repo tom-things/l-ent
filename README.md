@@ -3,7 +3,7 @@
 Interface alternative pour les portails ENT des universités françaises.  
 Regroupe notes, emploi du temps et services dans une seule page.
 
-Première université supportée : **Université de Rennes**. Le projet est conçu pour que la vôtre soit la prochaine — toute la partie spécifique à une université tient dans un seul dossier de configuration. **[Ajoutez la vôtre →](#-ajoutez-votre-université)**
+Université supportée : **Université de Rennes**. Le projet est conçu pour être modulaire et accepter facilement de nouvelles universités et écoles : toute la partie spécifique à une université tient dans un seul dossier de configuration. **[Ajoutez la vôtre →](#-ajoutez-votre-université)**
 
 > Client non officiel, indépendant et non affilié aux universités concernées.  
 > La majorité du backend a été développée avec l'aide d'outils d'IA. S'attendre à un code peu optimisé !
@@ -16,18 +16,18 @@ Les portails ENT (uPortal + CAS, le standard des universités françaises) expos
 
 ## 🎓 Ajoutez votre université
 
-C'est le but du projet : qu'il vive au-delà de Rennes. Si votre université utilise un ENT uPortal derrière un CAS (c'est très probablement le cas), l'ajouter ne demande **aucune modification du code** — uniquement un dossier de configuration :
+Si votre université utilise un ENT uPortal derrière un CAS (probablement le cas), l'ajouter ne demande **aucune modification du code**; uniquement un dossier de configuration :
 
 ```bash
 cp -r universities/example-minimal universities/univ-lavotre
 # remplissez universities/univ-lavotre/{shared,client,server}.js
-# (nom, logo, URL de l'ENT et du CAS — le reste est optionnel)
+# (nom, logo, URL de l'ENT et du CAS le reste est optionnel)
 UNIVERSITY=univ-lavotre npm run dev
 ```
 
 - Chaque feature (ADE, planning, Moodle, notes…) est **optionnelle** : ce que votre université n'a pas est proprement masqué.
 - `universities/univ-rennes/` sert d'implémentation de référence complète, `universities/univ-exemple/` de démo jouable (compte `demo@l-ent.app` / `lent-demo`).
-- Une fois testée avec un vrai compte étudiant, **ouvrez une Pull Request** : votre université peut être hébergée sur l'instance officielle, sur son propre sous-domaine (voir plus bas) — ou déployez votre fork vous-même.
+- Une fois testée avec un vrai compte étudiant, **ouvrez une Pull Request** : votre université peut être hébergée sur l'instance officielle, sur son propre sous-domaine (voir plus bas) ou déployez votre fork vous-même.
 
 Guide pas-à-pas : **[docs/ADDING_A_UNIVERSITY.md](docs/ADDING_A_UNIVERSITY.md)**
 
@@ -95,7 +95,7 @@ MULTI_TENANT=1 npm start          # routage par hostname
 
 Une requête est associée à l'université dont le premier label du hostname égale son id sans tirets (`univ-rennes` → `univrennes.…`), ou dont le hostname figure dans l'export optionnel `hostnames` de son `shared.js`. Les hôtes inconnus (dont le domaine racine) retombent sur `UNIVERSITY`. Les cookies de session étant limités à l'hôte, chaque sous-domaine est isolé.
 
-Sur Render (plan gratuit) : build command `npm install && npm run build:all`, start command `MULTI_TENANT=1 node server.js`, puis ajoutez chaque sous-domaine comme *custom domain* du service (un CNAME + une entrée Render par université — un certificat TLS classique est émis par hostname, pas besoin de wildcard).
+Sur Render (plan gratuit) : build command `npm install && npm run build:all`, start command `MULTI_TENANT=1 node server.js`, puis ajoutez chaque sous-domaine comme *custom domain* du service (un CNAME + une entrée Render par université ; un certificat TLS classique est émis par hostname, pas besoin de wildcard).
 
 ## Sécurité & confidentialité
 
@@ -152,8 +152,6 @@ l'ent communique avec les systèmes suivants :
 - **Open-Meteo** : météo (API libre)
 
 ## Contribution
-
-La contribution la plus utile : **ajouter votre université** (voir [docs/ADDING_A_UNIVERSITY.md](docs/ADDING_A_UNIVERSITY.md)) — c'est un simple dossier de config, et c'est ce qui fait vivre le projet.
 
 1. Forkez le projet
 2. Créez une branche (`git checkout -b feat/univ-lavotre` ou `feat/ma-fonctionnalite`)
