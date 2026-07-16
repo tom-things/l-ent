@@ -1,25 +1,10 @@
 import { createCipheriv } from 'node:crypto'
 import { Buffer } from 'node:buffer'
 
-const DEFAULT_ADE_ORIGIN = 'https://campus-app.univ-rennes.fr'
+// All university-specific values (origin, app headers, password crypto, etab)
+// come from universities/<id>/server.js via the createAdeApiClient options.
 const ADE_SESSION_TTL_MS = 30 * 60 * 1000
 const ADE_UPCOMING_TTL_MS = 5 * 60 * 1000
-const ADE_PASSWORD_KEY = 'jfkgltshGD6_"hrj'
-const ADE_PASSWORD_IV = 'fgghjhgkdthykhjg'
-const ADE_APP_HEADERS = {
-  Accept: 'application/json',
-  'content-type': 'application/json',
-  session: 'null',
-  'X-lang': 'fr',
-  'X-nav-lang': 'fr-FR',
-  'X-App-version': '2.4.5',
-  'User-Agent': 'App-Campus-Mobile-2.4.5',
-  DeviceId: 'null',
-  DeviceVersion: '20030107',
-  DeviceOs: 'Web',
-  DeviceManufacturer: 'Google Inc.',
-  DeviceModel: '',
-}
 
 const adeSessionCache = new Map()
 const adeUpcomingCache = new Map()
@@ -108,19 +93,19 @@ function labelsMatch(left, right) {
     || normalizedRight.endsWith(` ${normalizedLeft}`)
 }
 
-export function buildAdeAppHeaders(session = 'null', extraHeaders = {}) {
+export function buildAdeAppHeaders(session = 'null', extraHeaders = {}, appHeaders = {}) {
   return {
-    ...ADE_APP_HEADERS,
+    ...appHeaders,
     session: session || 'null',
     ...extraHeaders,
   }
 }
 
-export function encryptAdePassword(password) {
+export function encryptAdePassword(password, passwordKey, passwordIv) {
   const cipher = createCipheriv(
     'aes-128-cbc',
-    Buffer.from(ADE_PASSWORD_KEY, 'utf8'),
-    Buffer.from(ADE_PASSWORD_IV, 'utf8'),
+    Buffer.from(passwordKey, 'utf8'),
+    Buffer.from(passwordIv, 'utf8'),
   )
 
   return Buffer.concat([
@@ -379,17 +364,21 @@ export function buildAdeUpcomingPath({ date, lookaheadDays = 21, refresh = 0 } =
 }
 
 export function createAdeApiClient({
-  adeOrigin = DEFAULT_ADE_ORIGIN,
+  adeOrigin,
   casOrigin = null,
   fetchImpl = fetch,
   followRedirectChain = null,
+  passwordKey,
+  passwordIv,
+  appHeaders = {},
+  etab,
 } = {}) {
   const adeApiBase = `${adeOrigin}/api`
 
   async function fetchAdeApi(path, session, extraHeaders = {}) {
     const url = `${adeApiBase}${path}`
     const response = await fetchImpl(url, {
-      headers: buildAdeAppHeaders(session, extraHeaders),
+      headers: buildAdeAppHeaders(session, extraHeaders, appHeaders),
     })
     const text = await response.text()
     const data = readJsonSafely(text) ?? text
@@ -438,11 +427,11 @@ export function createAdeApiClient({
     if (credentials?.username && credentials?.password) {
       const loginResponse = await fetchImpl(`${adeApiBase}/auth/login`, {
         method: 'POST',
-        headers: buildAdeAppHeaders('null'),
+        headers: buildAdeAppHeaders('null', {}, appHeaders),
         body: JSON.stringify({
           username: normalizeAdeUsername(credentials.username),
-          password: encryptAdePassword(credentials.password),
-          etab: credentials.etab ?? 'UR',
+          password: encryptAdePassword(credentials.password, passwordKey, passwordIv),
+          etab: credentials.etab ?? etab,
         }),
       })
       const loginText = await loginResponse.text()
@@ -506,7 +495,7 @@ export function createAdeApiClient({
       if (ticket) {
         const loginResponse = await fetchImpl(`${adeApiBase}/auth/login`, {
           method: 'POST',
-          headers: buildAdeAppHeaders('null'),
+          headers: buildAdeAppHeaders('null', {}, appHeaders),
           body: JSON.stringify({
             ticket,
             service: actualServiceUrl,
@@ -563,7 +552,7 @@ export function createAdeApiClient({
     const authResult = await authenticateToAde(jar, credentials, { cacheScope })
 
     if (!authResult.session) {
-      throw new Error('Unable to establish an ADE campus-app session.')
+      throw new Error('Unable to establish an ADE mobile-app session.')
     }
 
     const normalizedResourceIds = normalizeAdeResourceIds(resourceIds, authResult.loginData)

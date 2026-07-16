@@ -1,11 +1,15 @@
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
+import universityConfig from '@university'
 import lentLogoAlez from '../assets/login/lentlogo_alez.svg'
 import lentLogoAlezDark from '../assets/login/lentlogo_alez_dark.svg'
 import illustration from '../assets/login/illustration.webp'
-import universityRennesLogo from '../assets/uni_logos/univ-rennes.svg'
 import LentButton from './LentButton'
 import AboutModal from './AboutModal'
+
+const universityLogo = universityConfig.branding.logo
+const universityLogoAlt = universityConfig.branding.logoAlt ?? universityConfig.university?.name ?? ''
+const loginLinks = universityConfig.links ?? {}
 
 function LoginPage({
   credentials,
@@ -87,8 +91,8 @@ function LoginPage({
               <span className="text-text-muted text-base font-medium leading-none font-body">Avec</span>
               <img
                 className="block w-[92px] h-7 object-contain dark:invert"
-                src={universityRennesLogo}
-                alt="Université de Rennes"
+                src={universityLogo}
+                alt={universityLogoAlt}
                 width="92"
                 height="28"
               />
@@ -108,8 +112,8 @@ function LoginPage({
               <span className="text-text-muted text-base font-medium leading-none font-body">Avec</span>
               <img
                 className="block w-[92px] h-7 object-contain dark:invert"
-                src={universityRennesLogo}
-                alt="Université de Rennes"
+                src={universityLogo}
+                alt={universityLogoAlt}
                 width="92"
                 height="28"
               />
@@ -170,25 +174,31 @@ function LoginPage({
             </LentButton>
           </form>
 
-          <div className="flex justify-center items-start gap-[30px] max-md:flex-wrap max-md:gap-[14px_24px]">
-            <a
-              className="p-0 border-0 bg-transparent text-text font-inherit text-base font-medium leading-[1.06] underline underline-offset-2 font-body max-md:text-[15px]"
-              href="https://docinfo.univ-rennes1.fr/documentation/compte-jai-oublie-mon-mot-de-passe"
-            >
-              Mot de passe oublié
-            </a>
-            <a
-              className="p-0 border-0 bg-transparent text-text font-inherit text-base font-medium leading-[1.06] underline underline-offset-2 font-body max-md:text-[15px]"
-              href="https://sesame.univ-rennes1.fr/motdepasse/public/activate"
-            >
-              Activer mon compte
-            </a>
-          </div>
+          {loginLinks.forgotPassword || loginLinks.activateAccount ? (
+            <div className="flex justify-center items-start gap-[30px] max-md:flex-wrap max-md:gap-[14px_24px]">
+              {loginLinks.forgotPassword ? (
+                <a
+                  className="p-0 border-0 bg-transparent text-text font-inherit text-base font-medium leading-[1.06] underline underline-offset-2 font-body max-md:text-[15px]"
+                  href={loginLinks.forgotPassword}
+                >
+                  Mot de passe oublié
+                </a>
+              ) : null}
+              {loginLinks.activateAccount ? (
+                <a
+                  className="p-0 border-0 bg-transparent text-text font-inherit text-base font-medium leading-[1.06] underline underline-offset-2 font-body max-md:text-[15px]"
+                  href={loginLinks.activateAccount}
+                >
+                  Activer mon compte
+                </a>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <footer className="absolute bottom-8 left-12 right-12 flex flex-wrap justify-between gap-[8px_18px] text-text-muted text-[13px] font-medium leading-[1.1] font-body max-3xl:left-8 max-3xl:right-8 max-3xl:bottom-6 max-md:left-5 max-md:right-5 max-md:bottom-5 max-md:justify-center" aria-label="Copyright">
           <span className="max-md:hidden">Crédit photo : @_denniskim sur Instagram</span>
-          <span>Client alternatif à l&apos;ENT de l&apos;Université de Rennes</span>
+          <span>{universityConfig.branding.loginFooterLine}</span>
         </footer>
       </div>
     </section>

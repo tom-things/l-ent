@@ -7,52 +7,52 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FCFBF8" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f0f0f" />
-    <meta name="application-name" content="l'ent" />
+    <meta name="application-name" content="%LENT_APP_NAME%" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="l'ent" />
+    <meta name="apple-mobile-web-app-title" content="%LENT_APP_NAME%" />
     <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
     <meta name="googlebot" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
-    <title>l'ent | Client alternatif ENT Université de Rennes</title>
+    <title>%LENT_SEO_TITLE%</title>
 
     <!-- Primary Meta Tags -->
-    <meta name="title" content="l'ent | Client alternatif ENT Université de Rennes" />
+    <meta name="title" content="%LENT_SEO_TITLE%" />
     <meta
       name="description"
-      content="Client alternatif non officiel à l'ENT de l'Université de Rennes pour consulter notes, emploi du temps ADE, résultats et services universitaires depuis une interface plus lisible."
+      content="%LENT_SEO_DESCRIPTION%"
     />
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="fr_FR" />
-    <meta property="og:site_name" content="l'ent" />
+    <meta property="og:site_name" content="%LENT_APP_NAME%" />
     <meta property="og:url" content="/" />
-    <meta property="og:title" content="l'ent | Client alternatif ENT Université de Rennes" />
+    <meta property="og:title" content="%LENT_SEO_TITLE%" />
     <meta
       property="og:description"
-      content="Client alternatif non officiel à l'ENT de l'Université de Rennes pour consulter notes, emploi du temps ADE, résultats et services universitaires depuis une interface plus lisible."
+      content="%LENT_SEO_DESCRIPTION%"
     />
     <meta property="og:image" content="/og-image.png" />
-    <meta property="og:image:alt" content="Aperçu de l'application l'ent" />
+    <meta property="og:image:alt" content="Aperçu de l'application %LENT_APP_NAME%" />
 
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:url" content="/" />
-    <meta name="twitter:title" content="l'ent | Client alternatif ENT Université de Rennes" />
+    <meta name="twitter:title" content="%LENT_SEO_TITLE%" />
     <meta
       name="twitter:description"
-      content="Client alternatif non officiel à l'ENT de l'Université de Rennes pour consulter notes, emploi du temps ADE, résultats et services universitaires depuis une interface plus lisible."
+      content="%LENT_SEO_DESCRIPTION%"
     />
     <meta name="twitter:image" content="/og-image.png" />
-    <meta name="twitter:image:alt" content="Aperçu de l'application l'ent" />
+    <meta name="twitter:image:alt" content="Aperçu de l'application %LENT_APP_NAME%" />
 
     <script type="application/ld+json" id="seo-structured-data">
       {
         "@context": "https://schema.org",
         "@type": "WebApplication",
-        "name": "l'ent",
-        "headline": "l'ent | Client alternatif ENT Université de Rennes",
-        "description": "Client alternatif non officiel à l'ENT de l'Université de Rennes pour consulter notes, emploi du temps ADE, résultats et services universitaires depuis une interface plus lisible.",
+        "name": "%LENT_APP_NAME%",
+        "headline": "%LENT_SEO_TITLE%",
+        "description": "%LENT_SEO_DESCRIPTION%",
         "applicationCategory": "EducationApplication",
         "operatingSystem": "Any",
         "inLanguage": "fr-FR",
@@ -62,7 +62,7 @@
           "price": "0",
           "priceCurrency": "EUR"
         },
-        "sameAs": ["https://github.com/tom-things/l-ent"],
+        "sameAs": ["%LENT_REPO_URL%"],
         "featureList": [
           "Consulter ses notes et résultats",
           "Retrouver son emploi du temps ADE",

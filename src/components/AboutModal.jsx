@@ -1,7 +1,10 @@
 import { useEffect } from 'react'
 import { Icon } from '@iconify/react'
+import universityConfig from '@university'
 
 /* global __BUILD_HASH__ */
+
+const about = universityConfig.branding.about ?? {}
 
 // Body of the "À propos" modal, also embedded at the bottom of the account
 // modal.
@@ -11,32 +14,40 @@ export function AboutContent({ demoLinkLabel = '', onDemoLinkClick = null }) {
   return (
     <div className="flex flex-col gap-3 font-body text-[15px] leading-[1.45]">
       <p className="m-0">
-        <strong>l&apos;ent</strong> est un client alternatif aux services numériques de l&apos;Université de Rennes.
+        <strong>{universityConfig.branding.appName}</strong> {about.intro}
       </p>
-      <p className="m-0 text-text-secondary">
-        Client non officiel, indépendant et non affilié à l&apos;Université de Rennes. Ce projet ne stocke aucune donnée personnelle et se contente de relayer les services existants dans une interface repensée.
-      </p>
-      <p className="m-0">
-        Code source disponible sur{' '}
-        <a
-          href="https://github.com/tom-things/l-ent"
-          className="text-text underline underline-offset-2"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          GitHub
-        </a>
-      </p>
-      <p className="m-0 text-text-muted text-[13px]">
-        <a
-          href="https://tomthings.fr"
-          className="text-text-muted underline underline-offset-2"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Fait par un étudiant de l&apos;IUT de Lannion
-        </a>
-      </p>
+      {about.disclaimer ? (
+        <p className="m-0 text-text-secondary">
+          {about.disclaimer}
+        </p>
+      ) : null}
+      {about.repoUrl ? (
+        <p className="m-0">
+          Code source disponible sur{' '}
+          <a
+            href={about.repoUrl}
+            className="text-text underline underline-offset-2"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            GitHub
+          </a>
+        </p>
+      ) : null}
+      {about.authorLine ? (
+        <p className="m-0 text-text-muted text-[13px]">
+          {about.authorUrl ? (
+            <a
+              href={about.authorUrl}
+              className="text-text-muted underline underline-offset-2"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {about.authorLine}
+            </a>
+          ) : about.authorLine}
+        </p>
+      ) : null}
       <p className="m-0 text-text-muted text-[12px] font-mono">
         {import.meta.env.DEV ? 'dev' : `build ${typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev'}`}
       </p>

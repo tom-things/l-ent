@@ -1,7 +1,9 @@
-export const APP_NAME = "l'ent"
-export const APP_DEFAULT_TITLE = "l'ent | Toute ta fac, au même endroit."
-export const SEO_TITLE = "l'ent | Client alternatif ENT Université de Rennes"
-export const SEO_DESCRIPTION = "Client alternatif non officiel à l'ENT de l'Université de Rennes pour consulter notes, emploi du temps ADE, résultats et services universitaires depuis une interface plus lisible."
+import universityConfig from '@university'
+
+export const APP_NAME = universityConfig.branding.appName
+export const APP_DEFAULT_TITLE = universityConfig.branding.defaultTitle
+export const SEO_TITLE = universityConfig.branding.seoTitle
+export const SEO_DESCRIPTION = universityConfig.branding.seoDescription
 export const SEO_ROBOTS_CONTENT = 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1'
 
 const OG_IMAGE_PATH = '/og-image.png'
@@ -55,8 +57,8 @@ function buildStructuredData(pageUrl, imageUrl) {
     url: pageUrl,
     image: imageUrl,
     sameAs: [
-      'https://github.com/tom-things/l-ent',
-    ],
+      universityConfig.branding.about?.repoUrl,
+    ].filter(Boolean),
     featureList: [
       'Consulter ses notes et résultats',
       'Retrouver son emploi du temps ADE',

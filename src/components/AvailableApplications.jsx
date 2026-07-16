@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from '@iconify/react'
-import { getAppIcon } from '../assets/app_icons/uni_rennes'
+import universityConfig from '@university'
 import {
   ENT_ORIGIN,
   buildEntProxyHref,
@@ -392,14 +392,8 @@ function normalizeBootstrapSections(bootstrap) {
   }
 }
 
-const APP_CATEGORIES = [
-  { label: 'Scolarité', keywords: ['notes', 'dossier étudiant', 'apogée', 'contrat pédagogique', 'stages', 'évaluation orthographique', 'contrats étudiants'] },
-  { label: 'Communication', keywords: ['messagerie', 'annuaire', 'listes de diffusion', 'webconférence', 'webconference'] },
-  { label: 'Pédagogie', keywords: ['moodle', 'foad', 'mooc', 'modules auto-formatifs', 'création de modules', 'téléformation', 'klaxoon'] },
-  { label: 'Ressources', keywords: ['mediaserver', 'nudgis', 'ori-oai', 'portail des thèses', 'recherche documentaire', 'documentation des services', 'espaces de stockage', 'mise en ligne', 'loxya'] },
-  { label: 'Compte', keywords: ['sésame', 'sesame', 'compte informatique', 'mfa', 'authentification', 'crédits d\'impression'] },
-  { label: 'Outils', keywords: ['microsoft 365', 'esup signature', 'emplois du temps', 'assistance'] },
-]
+const APP_CATEGORIES = universityConfig.services?.categories ?? []
+const getAppIcon = universityConfig.services?.getAppIcon ?? (() => null)
 
 function getAppCategory(title = '') {
   const t = title.trim().toLowerCase()
@@ -412,19 +406,8 @@ function getAppCategory(title = '') {
 }
 
 function isUnavailableGradeApplication(application = {}) {
-  const haystack = [
-    application.id,
-    application.fname,
-    application.title,
-    application.name,
-    application.description,
-    application.href,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
-
-  return haystack.includes('notes') && (haystack.includes('lannion') || haystack.includes('iutlan'))
+  const isUnavailable = universityConfig.services?.isUnavailableApplication
+  return typeof isUnavailable === 'function' ? Boolean(isUnavailable(application)) : false
 }
 
 function normalizeAllServices(bootstrap) {
@@ -584,11 +567,17 @@ function getUrlHostname(value) {
   }
 }
 
+const CAS_HOST = universityConfig.origins?.cas ? new URL(universityConfig.origins.cas).hostname : ''
+
+function isCasHost(hostname) {
+  return Boolean(CAS_HOST) && hostname === CAS_HOST
+}
+
 function chainTouchesCas(chain = []) {
   return chain.some((step) => {
     const currentHost = getUrlHostname(step?.url)
     const nextHost = getUrlHostname(step?.location)
-    return currentHost.includes('sso-cas') || nextHost.includes('sso-cas')
+    return isCasHost(currentHost) || isCasHost(nextHost)
   })
 }
 
@@ -602,7 +591,7 @@ function shouldUseServerLaunchForTarget(href, launchDebug = null) {
   }
 
   const hrefHost = getUrlHostname(href)
-  if (hrefHost.includes('sso-cas')) {
+  if (isCasHost(hrefHost)) {
     return true
   }
 
@@ -943,13 +932,11 @@ function AvailableApplications({
         const sections = normalizeBootstrapSections(bootstrap)
         const services = normalizeAllServices(bootstrap)
 
-        if (establishment === 'iutlan') {
+        const extraServices = universityConfig.establishments?.byId?.[establishment]?.extraServices ?? []
+        for (const extraService of [...extraServices].reverse()) {
           services.unshift({
-            id: 'lent-iutlan-loxya',
-            title: 'Loxya',
-            description: 'Location de matériel audiovisuel',
-            href: toNavigableHref('https://iut-lannion.loxya.app/external/login'),
-            target: '_blank',
+            ...extraService,
+            href: toNavigableHref(extraService.href),
           })
         }
 
