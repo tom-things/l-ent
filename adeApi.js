@@ -552,7 +552,7 @@ export function createAdeApiClient({
     const authResult = await authenticateToAde(jar, credentials, { cacheScope })
 
     if (!authResult.session) {
-      throw new Error('Unable to establish an ADE campus-app session.')
+      throw new Error('Unable to establish an ADE mobile-app session.')
     }
 
     const normalizedResourceIds = normalizeAdeResourceIds(resourceIds, authResult.loginData)
