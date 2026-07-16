@@ -1,15 +1,22 @@
 import { useCallback, useState } from 'react'
 import { Icon } from '@iconify/react'
+import universityConfig from '@university'
 import lentLogo from '../assets/lentlogo.svg'
 import lentLogoDark from '../assets/lentlogo-dark.svg'
 import UpdateNotice from './UpdateNotice'
 import { ENT_AUTH_PREFIX } from '../entApi'
 import { GRADES_UNAVAILABLE_DETAIL, GRADES_UNAVAILABLE_TITLE } from '../gradeFeatureState'
 
-const ADE_DOAUTH = 'https://planning.univ-rennes1.fr/direct/myplanning.jsp'
-const ADE_HREF = `${ENT_AUTH_PREFIX}/launch?url=${encodeURIComponent(ADE_DOAUTH)}`
+const PLANNING_SERVICE_URL = universityConfig.planning?.serviceUrl ?? null
+const PLANNING_HREF = PLANNING_SERVICE_URL
+  ? `${ENT_AUTH_PREFIX}/launch?url=${encodeURIComponent(PLANNING_SERVICE_URL)}`
+  : null
+const SIDEBAR_LOGO_ALT = universityConfig.branding.sidebarLogoAlt ?? universityConfig.branding.appName
 
 function buildNavItems(establishment) {
+  const showGradesNav = Boolean(universityConfig.features?.grades)
+    && universityConfig.establishments?.byId?.[establishment]?.gradeWidgets
+
   return [
     {
       id: 'applications',
@@ -17,8 +24,9 @@ function buildNavItems(establishment) {
       icon: 'carbon:app-switcher',
       targetId: 'sidebar-section-applications',
     },
-    // Grades (and their unavailability notice) only concern IUT Lannion.
-    ...(establishment === 'iutlan'
+    // Grades nav (and their unavailability notice) only for establishments
+    // whose config enables grade widgets.
+    ...(showGradesNav
       ? [{
           id: 'grades',
           label: 'Mes notes',
@@ -28,13 +36,15 @@ function buildNavItems(establishment) {
           disabledDetail: GRADES_UNAVAILABLE_DETAIL,
         }]
       : []),
-    {
-      id: 'planning',
-      label: 'Planning',
-      icon: 'carbon:calendar',
-      href: ADE_HREF,
-      target: '_blank',
-    },
+    ...(universityConfig.features?.planning && PLANNING_HREF
+      ? [{
+          id: 'planning',
+          label: 'Planning',
+          icon: 'carbon:calendar',
+          href: PLANNING_HREF,
+          target: '_blank',
+        }]
+      : []),
   ]
 }
 
@@ -95,12 +105,12 @@ function Sidebar({
         >
           <img
             src={lentLogo}
-            alt="L'ent — Université de Rennes"
+            alt={SIDEBAR_LOGO_ALT}
             className="block h-[58px] w-auto dark:hidden"
           />
           <img
             src={lentLogoDark}
-            alt="L'ent — Université de Rennes"
+            alt={SIDEBAR_LOGO_ALT}
             className="hidden h-[58px] w-auto dark:block"
           />
         </a>

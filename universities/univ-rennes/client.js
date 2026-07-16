@@ -3,7 +3,7 @@
 // This is the reference implementation forks should copy (see docs/ADDING_A_UNIVERSITY.md).
 import logo from './assets/logo.svg'
 import { getAppIcon } from './app-icons/index.js'
-import { id, entOrigin, features, planningServiceUrl } from './shared.js'
+import { id, casOrigin, entOrigin, features, gradesCopy, planningServiceUrl, portalEntryPath } from './shared.js'
 
 export default {
   id,
@@ -33,14 +33,20 @@ export default {
     },
   },
 
-  // Optional help links shown on the login page; omit an entry to hide the link.
+  // Optional help links (login page + account modal); omit an entry to hide it.
   links: {
     forgotPassword: 'https://docinfo.univ-rennes1.fr/documentation/compte-jai-oublie-mon-mot-de-passe',
     activateAccount: 'https://sesame.univ-rennes1.fr/motdepasse/public/activate',
+    manageAccount: 'https://sesame.univ-rennes.fr/comptes/',
   },
 
   origins: {
     ent: entOrigin,
+    cas: casOrigin,
+  },
+
+  auth: {
+    portalEntryPath,
   },
 
   features,
@@ -115,10 +121,5 @@ export default {
     },
   },
 
-  // Copy shown when the grades feature is 'disabled'.
-  grades: {
-    unavailableTitle: 'Notes temporairement indisponibles',
-    unavailableDetail: "Suite à une demande de l'IUT visant à fermer l'accès public à ScoDoc.",
-    disabledPillLabel: 'Notes indisponibles',
-  },
+  grades: gradesCopy,
 }

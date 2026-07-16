@@ -1,7 +1,7 @@
 // Université de Rennes — server-side configuration.
 // Never imported by client code: holds origins, auth-flow parameters and the
 // reverse-engineered ADE mobile-app credentials.
-import { id, entOrigin, features, planningServiceUrl } from './shared.js'
+import { id, casOrigin, entOrigin, features, gradesCopy, planningServiceUrl, portalEntryPath } from './shared.js'
 
 export default {
   id,
@@ -10,7 +10,7 @@ export default {
 
   origins: {
     ent: entOrigin,
-    cas: 'https://sso-cas.univ-rennes.fr',
+    cas: casOrigin,
     // Set any of these to null when the university has no such service —
     // the matching feature flag must be false too.
     ade: 'https://campus-app.univ-rennes.fr',
@@ -19,9 +19,7 @@ export default {
   },
 
   auth: {
-    // uPortal landing page: login entry point, default Referer and the URL
-    // whose response proves the CAS flow landed back authenticated.
-    portalEntryPath: '/f/services/normal/render.uP',
+    portalEntryPath,
   },
 
   moodle: {
@@ -58,4 +56,6 @@ export default {
     serviceUrl: planningServiceUrl,
     gwtClientId: 'Z0pqq18',
   },
+
+  grades: gradesCopy,
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '@iconify/react'
+import universityConfig from '@university'
 import { ENT_AUTH_PREFIX, getAdeUpcoming, getRecentEntLoginAgeMs } from '../entApi'
 
 const CLASS_COLORS_KEY = 'l-ent:class-colors'
@@ -9,8 +10,10 @@ const NEXT_CLASS_LOOKAHEAD_DAYS = 21
 const NEXT_CLASS_TICK_MS = 30 * 1000
 const NEXT_CLASS_REFRESH_MS = 5 * 60 * 1000
 const NEXT_CLASS_LOGIN_QUIET_MS = 90 * 1000
-const ADE_DOAUTH = 'https://planning.univ-rennes1.fr/direct/myplanning.jsp'
-const ADE_HREF = `${ENT_AUTH_PREFIX}/launch?url=${encodeURIComponent(ADE_DOAUTH)}`
+const PLANNING_SERVICE_URL = universityConfig.planning?.serviceUrl ?? null
+const ADE_HREF = PLANNING_SERVICE_URL
+  ? `${ENT_AUTH_PREFIX}/launch?url=${encodeURIComponent(PLANNING_SERVICE_URL)}`
+  : null
 
 function createWidgetState(overrides = {}) {
   return {
@@ -785,6 +788,10 @@ function WidgetNextClass({
   const statusCopy = getStatusCopy(widgetState, lookaheadDays)
   const isStatusWide = ['unconfigured', 'limited', 'empty', 'paused', 'error'].includes(widgetState.status)
   const openAdePlanning = useCallback(() => {
+    if (!ADE_HREF) {
+      return
+    }
+
     window.open(ADE_HREF, '_blank', 'noopener,noreferrer')
   }, [])
   const handleRetry = useCallback((event) => {

@@ -1,7 +1,11 @@
-export const GRADES_UNAVAILABLE_TITLE = 'Notes temporairement indisponibles'
-export const GRADES_UNAVAILABLE_DETAIL = "Suite à une demande de l'IUT visant à fermer l'accès public à ScoDoc."
+import universityConfig from '@university'
+
+const gradesCopy = universityConfig.grades ?? {}
+
+export const GRADES_UNAVAILABLE_TITLE = gradesCopy.unavailableTitle ?? 'Notes indisponibles'
+export const GRADES_UNAVAILABLE_DETAIL = gradesCopy.unavailableDetail ?? ''
 export const GRADES_UNAVAILABLE_MESSAGE = `${GRADES_UNAVAILABLE_TITLE}. ${GRADES_UNAVAILABLE_DETAIL}`
-export const GRADES_DISABLED_PILL_LABEL = 'Notes indisponibles'
+export const GRADES_DISABLED_PILL_LABEL = gradesCopy.disabledPillLabel ?? 'Notes indisponibles'
 
 export const DEMO_AVERAGE_GRADE = {
   average: '13.7',

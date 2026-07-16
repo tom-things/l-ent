@@ -40,10 +40,13 @@ import {
   normalizeDemoState,
   searchDemoAdeTree,
 } from '../src/demoAccount.js'
-import { GRADES_UNAVAILABLE_MESSAGE } from '../src/gradeFeatureState.js'
-
 export function createEntAuthApp(universityConfig) {
 const app = express()
+
+const GRADES_UNAVAILABLE_MESSAGE = [
+  universityConfig.grades?.unavailableTitle ?? 'Notes indisponibles',
+  universityConfig.grades?.unavailableDetail,
+].filter(Boolean).join('. ')
 
 const FEATURES = universityConfig.features ?? {}
 

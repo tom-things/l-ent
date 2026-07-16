@@ -1,6 +1,8 @@
+import universityConfig from '@university'
 import { GRADES_UNAVAILABLE_MESSAGE } from './gradeFeatureState'
 
-export const ENT_ORIGIN = 'https://services-numeriques.univ-rennes.fr'
+export const ENT_ORIGIN = universityConfig.origins.ent
+const ENT_HOST = new URL(ENT_ORIGIN).hostname
 const APP_BASE_URL = (() => {
   const rawBaseUrl = String(import.meta.env?.BASE_URL || '/').trim()
 
@@ -13,7 +15,7 @@ const APP_BASE_URL = (() => {
 
 export const ENT_PROXY_PREFIX = `${APP_BASE_URL}/__ent_proxy`
 export const ENT_AUTH_PREFIX = `${APP_BASE_URL}/__ent_auth`
-export const DEFAULT_REFERER = `${ENT_ORIGIN}/f/services/normal/render.uP`
+export const DEFAULT_REFERER = `${ENT_ORIGIN}${universityConfig.auth?.portalEntryPath ?? '/'}`
 const DEFAULT_ACCEPT = 'application/json, text/html;q=0.9, text/plain;q=0.8, */*;q=0.5'
 const DEMO_SESSION_MODE = 'demo'
 const RECENT_LOGIN_SESSION_KEY = 'l-ent:recent-login-at'
@@ -69,7 +71,7 @@ function normalizeProxyPath(input) {
   }
 
   if (input.startsWith('http://') || input.startsWith('https://')) {
-    throw new Error('Only services-numeriques.univ-rennes.fr URLs are supported by the local proxy.')
+    throw new Error(`Only ${ENT_HOST} URLs are supported by the local proxy.`)
   }
 
   return input.startsWith('/') ? input : `/${input}`
@@ -299,6 +301,14 @@ const GRADES_CACHE_KEY = 'l-ent:grades-cache'
 
 export async function getGrades({ force = false } = {}) {
   void force
+
+  if (!universityConfig.features?.grades) {
+    return {
+      authenticated: false,
+      grades: null,
+      disabled: true,
+    }
+  }
 
   try {
     const response = await fetch(`${ENT_AUTH_PREFIX}/grades`, {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Icon } from '@iconify/react'
+import universityConfig from '@university'
 import AvailableApplications from './AvailableApplications'
 import WidgetAverageGrade from './WidgetAverageGrade'
 import WidgetLatestGrade from './WidgetLatestGrade'
@@ -11,7 +12,12 @@ import {
 } from '../weatherApi'
 
 const WEATHER_CITY_KEY = 'l-ent:weather-city'
-const DEFAULT_WEATHER_CITY = 'Rennes'
+const WEATHER_CONFIG = universityConfig.features?.weather ?? {}
+const DEFAULT_WEATHER_CITY = WEATHER_CONFIG.defaultCity || 'Paris'
+
+function getEstablishmentConfig(establishment) {
+  return universityConfig.establishments?.byId?.[establishment] ?? null
+}
 
 const INITIAL_WEATHER_STATE = {
   summary: 'Chargement météo...',
@@ -234,6 +240,12 @@ function WidgetContainer({
     let isMounted = true
 
     async function hydrateWeather() {
+      if (WEATHER_CONFIG.enabled === false) {
+        setHasWeatherLoaded(true)
+        setIsWeatherLoading(false)
+        return
+      }
+
       setIsWeatherLoading(true)
 
       try {
@@ -347,7 +359,7 @@ function WidgetContainer({
           <p className="m-0 leading-[1.2] text-[15px] font-medium line-clamp-2" title={greetingSubtitle}>{greetingSubtitle}</p>
         </article>
 
-        {!hideNextClass && (establishment === 'iutlan' || debugNextClass) ? (
+        {!hideNextClass && (getEstablishmentConfig(establishment)?.nextClassWidget || debugNextClass) ? (
           <div id="sidebar-section-planning" className="contents">
             <WidgetNextClass
               visible={areWidgetsVisible}
@@ -358,7 +370,7 @@ function WidgetContainer({
             />
           </div>
         ) : null}
-        {!hideGradeWidgets && establishment === 'iutlan' ? (
+        {!hideGradeWidgets && Boolean(universityConfig.features?.grades) && getEstablishmentConfig(establishment)?.gradeWidgets ? (
           <div id="sidebar-section-grades" className="flex-[1_1_100%] min-w-0 flex items-stretch gap-5 max-2xl:gap-[14px] max-md:gap-[10px] 2xl:contents">
             <WidgetAverageGrade visible={areWidgetsVisible} />
             <WidgetLatestGrade visible={areWidgetsVisible} />
@@ -408,7 +420,7 @@ function WidgetContainer({
                   className="w-full min-h-[48px] border border-border-input rounded-[53px] bg-bg-input text-text font-inherit text-base leading-none py-[13px] px-4 box-border placeholder:text-text-muted focus-visible:border-brand focus-visible:outline-none font-body"
                   value={locationQuery}
                   onChange={(event) => setLocationQuery(event.target.value)}
-                  placeholder="Ex: Rennes ou 35000"
+                  placeholder={`Ex: ${DEFAULT_WEATHER_CITY} ou 35000`}
                   disabled={isLocationActionDisabled}
                 />
               </label>

@@ -76,7 +76,7 @@ function toSameOriginPath(urlValue) {
 
   const url = new URL(urlValue)
   if (url.origin !== ENT_ORIGIN) {
-    throw new Error('The imported cURL request targets a different host. The local proxy only supports services-numeriques.univ-rennes.fr.')
+    throw new Error(`The imported cURL request targets a different host. The local proxy only supports ${new URL(ENT_ORIGIN).hostname}.`)
   }
 
   return `${url.pathname}${url.search}`

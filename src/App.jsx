@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Icon } from '@iconify/react'
+import universityConfig from '@university'
 import favicon from './assets/favicon.png'
 import AppHeader from './components/AppHeader'
 import AppFooter from './components/AppFooter'
@@ -738,6 +739,11 @@ function findAdeTreeNodeById(rootNode, targetId) {
 }
 
 function detectEstablishmentFromAdeTree(treePayload) {
+  const establishments = universityConfig.establishments
+  if (!establishments) {
+    return null
+  }
+
   const root = treePayload?.root
   const currentPathIds = Array.isArray(treePayload?.currentPathIds) ? treePayload.currentPathIds : []
   const currentNodes = currentPathIds
@@ -749,17 +755,13 @@ function detectEstablishmentFromAdeTree(treePayload) {
     String(node.path ?? ''),
   ]).join(' | ').toLowerCase()
 
-  if (searchHaystack.includes('iut lannion')) return 'iutlan'
-  if (searchHaystack.includes('iut saint-brieuc')) return 'iutsaib'
-  if (searchHaystack.includes('iut saint-malo')) return 'iutsai'
-  if (searchHaystack.includes('osur')) return 'ods'
-  if (searchHaystack.includes('odontologie')) return 'ufro'
-  if (searchHaystack.includes('pharmacie')) return 'ufrp'
-  if (searchHaystack.includes('médecine') || searchHaystack.includes('medecine')) return 'ufrm'
-  if (searchHaystack.includes('faculté des sciences') || searchHaystack.includes('faculte des sciences') || searchHaystack.includes('istic')) return 'ufrs'
-  if (searchHaystack.includes('droit') || searchHaystack.includes('science politique')) return 'fdse'
+  for (const rule of establishments.detectFromAdeTree ?? []) {
+    if ((rule.includes ?? []).some((needle) => searchHaystack.includes(needle))) {
+      return rule.id
+    }
+  }
 
-  return 'other'
+  return establishments.fallbackId ?? null
 }
 
 function normalizeAdePathLabels(nodes) {
@@ -1807,9 +1809,14 @@ function App() {
     }))
   }, [accountModalPlanningState.tpOptions])
 
+  const manageAccountUrl = universityConfig.links?.manageAccount ?? null
   const handleManageAccount = useCallback(() => {
-    window.location.assign('https://sesame.univ-rennes.fr/comptes/')
-  }, [])
+    if (!manageAccountUrl) {
+      return
+    }
+
+    window.location.assign(manageAccountUrl)
+  }, [manageAccountUrl])
 
   function handleOnboardingBack() {
     setTpTransitionDirection('back')
@@ -2343,7 +2350,7 @@ function App() {
       <AccountModal
         open={isAccountModalOpen}
         onClose={handleCloseAccountModal}
-        onManageAccount={sessionState.user === DEMO_CREDENTIALS.username ? null : handleManageAccount}
+        onManageAccount={sessionState.user === DEMO_CREDENTIALS.username || !manageAccountUrl ? null : handleManageAccount}
         onYearChange={handleAccountModalYearChange}
         onTdChange={handleAccountModalTdChange}
         onTpChange={handleAccountModalTpChange}

@@ -1,7 +1,9 @@
+import universityConfig from '@university'
+
 const WEATHER_API_URL = 'https://api.open-meteo.com/v1/forecast'
 const GEOCODING_API_URL = 'https://geocoding-api.open-meteo.com/v1'
 const REVERSE_GEOCODING_API_URL = 'https://nominatim.openstreetmap.org/reverse'
-const DEFAULT_FALLBACK_LOCATION = 'Rennes'
+const DEFAULT_FALLBACK_LOCATION = universityConfig.features?.weather?.defaultCity || 'Paris'
 function buildWeatherGradient(color) {
   return `linear-gradient(180deg, ${color} 0%, transparent 55%)`
 }
