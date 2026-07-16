@@ -1,11 +1,6 @@
-// Rennes defaults, kept while the dev backend in vite.config.js still calls
-// createPlanningRpcClient without options.
-// TODO(university-config): drop once the dev backend is unified with server.js.
-export const PLANNING_ORIGIN = 'https://planning.univ-rennes1.fr'
-export const PLANNING_SERVICE_URL = `${PLANNING_ORIGIN}/direct/myplanning.jsp`
-
+// All university-specific values (planning origin, GWT client id) come from
+// universities/<id>/server.js via the createPlanningRpcClient options.
 const DAY_MS = 24 * 60 * 60 * 1000
-const DEFAULT_PLANNING_GWT_CLIENT_ID = 'Z0pqq18'
 const CONTEXT_CACHE_TTL_MS = 5 * 60 * 1000
 const CONTEXT_CACHE_STALE_MS = 55 * 60 * 1000
 const TREE_CACHE_TTL_MS = 30 * 60 * 1000
@@ -1152,8 +1147,8 @@ export function createPlanningRpcClient({
   casOrigin,
   fetchWithJar,
   followRedirectChain,
-  planningOrigin = PLANNING_ORIGIN,
-  gwtClientId = DEFAULT_PLANNING_GWT_CLIENT_ID,
+  planningOrigin,
+  gwtClientId,
 }) {
   if (typeof casOrigin !== 'string' || !casOrigin) {
     throw new TypeError('createPlanningRpcClient requires a casOrigin string.')

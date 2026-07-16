@@ -1,30 +1,10 @@
 import { createCipheriv } from 'node:crypto'
 import { Buffer } from 'node:buffer'
 
-// Default values match Université de Rennes; every deployment should pass its
-// own university's values to createAdeApiClient (see universities/<id>/server.js).
-// TODO(university-config): drop these defaults once the dev backend in
-// vite.config.js is unified with server.js.
-const DEFAULT_ADE_ORIGIN = 'https://campus-app.univ-rennes.fr'
+// All university-specific values (origin, app headers, password crypto, etab)
+// come from universities/<id>/server.js via the createAdeApiClient options.
 const ADE_SESSION_TTL_MS = 30 * 60 * 1000
 const ADE_UPCOMING_TTL_MS = 5 * 60 * 1000
-const DEFAULT_ADE_PASSWORD_KEY = 'jfkgltshGD6_"hrj'
-const DEFAULT_ADE_PASSWORD_IV = 'fgghjhgkdthykhjg'
-const DEFAULT_ADE_ETAB = 'UR'
-const DEFAULT_ADE_APP_HEADERS = {
-  Accept: 'application/json',
-  'content-type': 'application/json',
-  session: 'null',
-  'X-lang': 'fr',
-  'X-nav-lang': 'fr-FR',
-  'X-App-version': '2.4.5',
-  'User-Agent': 'App-Campus-Mobile-2.4.5',
-  DeviceId: 'null',
-  DeviceVersion: '20030107',
-  DeviceOs: 'Web',
-  DeviceManufacturer: 'Google Inc.',
-  DeviceModel: '',
-}
 
 const adeSessionCache = new Map()
 const adeUpcomingCache = new Map()
@@ -113,7 +93,7 @@ function labelsMatch(left, right) {
     || normalizedRight.endsWith(` ${normalizedLeft}`)
 }
 
-export function buildAdeAppHeaders(session = 'null', extraHeaders = {}, appHeaders = DEFAULT_ADE_APP_HEADERS) {
+export function buildAdeAppHeaders(session = 'null', extraHeaders = {}, appHeaders = {}) {
   return {
     ...appHeaders,
     session: session || 'null',
@@ -121,7 +101,7 @@ export function buildAdeAppHeaders(session = 'null', extraHeaders = {}, appHeade
   }
 }
 
-export function encryptAdePassword(password, passwordKey = DEFAULT_ADE_PASSWORD_KEY, passwordIv = DEFAULT_ADE_PASSWORD_IV) {
+export function encryptAdePassword(password, passwordKey, passwordIv) {
   const cipher = createCipheriv(
     'aes-128-cbc',
     Buffer.from(passwordKey, 'utf8'),
@@ -384,14 +364,14 @@ export function buildAdeUpcomingPath({ date, lookaheadDays = 21, refresh = 0 } =
 }
 
 export function createAdeApiClient({
-  adeOrigin = DEFAULT_ADE_ORIGIN,
+  adeOrigin,
   casOrigin = null,
   fetchImpl = fetch,
   followRedirectChain = null,
-  passwordKey = DEFAULT_ADE_PASSWORD_KEY,
-  passwordIv = DEFAULT_ADE_PASSWORD_IV,
-  appHeaders = DEFAULT_ADE_APP_HEADERS,
-  etab = DEFAULT_ADE_ETAB,
+  passwordKey,
+  passwordIv,
+  appHeaders = {},
+  etab,
 } = {}) {
   const adeApiBase = `${adeOrigin}/api`
 
