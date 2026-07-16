@@ -42,3 +42,11 @@ export async function loadServerConfig(rawId) {
   const module = await import(moduleUrl)
   return module.default
 }
+
+// Pure-data subset (branding text, features…) usable from Node — e.g. by the
+// Vite config for index.html templating and the PWA manifest.
+export async function loadSharedConfig(rawId) {
+  const id = resolveUniversityId(rawId)
+  const moduleUrl = pathToFileURL(path.join(UNIVERSITIES_DIR, id, 'shared.js')).href
+  return await import(moduleUrl)
+}

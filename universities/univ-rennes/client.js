@@ -3,34 +3,26 @@
 // This is the reference implementation forks should copy (see docs/ADDING_A_UNIVERSITY.md).
 import logo from './assets/logo.svg'
 import { getAppIcon } from './app-icons/index.js'
-import { id, casOrigin, entOrigin, features, gradesCopy, planningServiceUrl, portalEntryPath } from './shared.js'
+import {
+  id,
+  branding,
+  casOrigin,
+  entOrigin,
+  features,
+  gradesCopy,
+  planningServiceUrl,
+  portalEntryPath,
+  university,
+} from './shared.js'
 
 export default {
   id,
 
-  university: {
-    name: 'Université de Rennes',
-    shortName: 'Rennes',
-  },
+  university,
 
   branding: {
-    appName: "l'ent",
-    defaultTitle: "l'ent | Toute ta fac, au même endroit.",
-    seoTitle: "l'ent | Client alternatif ENT Université de Rennes",
-    seoDescription:
-      "Client alternatif non officiel à l'ENT de l'Université de Rennes pour consulter notes, emploi du temps ADE, résultats et services universitaires depuis une interface plus lisible.",
+    ...branding,
     logo,
-    logoAlt: 'Université de Rennes',
-    sidebarLogoAlt: "L'ent — Université de Rennes",
-    loginFooterLine: "Client alternatif à l'ENT de l'Université de Rennes",
-    about: {
-      intro: "est un client alternatif aux services numériques de l'Université de Rennes.",
-      disclaimer:
-        "Client non officiel, indépendant et non affilié à l'Université de Rennes. Ce projet ne stocke aucune donnée personnelle et se contente de relayer les services existants dans une interface repensée.",
-      authorLine: "Fait par un étudiant de l'IUT de Lannion",
-      authorUrl: 'https://tomthings.fr',
-      repoUrl: 'https://github.com/tom-things/l-ent',
-    },
   },
 
   // Optional help links (login page + account modal); omit an entry to hide it.

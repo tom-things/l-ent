@@ -57,10 +57,19 @@ Le serveur Express écoute sur le port `3000` (configurable via `PORT`).
 ### Variables d'environnement
 
 
-| Variable         | Description                     | Requis           |
-| ---------------- | ------------------------------- | ---------------- |
-| `PORT`           | Port du serveur (défaut : 3000) | Non              |
-| `SESSION_SECRET` | Clé de signature des sessions   | Oui (production) |
+| Variable         | Description                                            | Requis           |
+| ---------------- | ------------------------------------------------------ | ---------------- |
+| `PORT`           | Port du serveur (défaut : 3000)                        | Non              |
+| `SESSION_SECRET` | Clé de signature des sessions                          | Oui (production) |
+| `UNIVERSITY`     | Université active (défaut : `univ-rennes`)             | Non              |
+
+## Forker pour votre université
+
+Tout ce qui est propre à l'Université de Rennes vit dans `universities/univ-rennes/` : origins (ENT, CAS, ADE, Moodle, Planning), branding, icônes de services, détection d'établissement, flags de features. Le reste du code est générique.
+
+Pour ajouter votre université : copiez `universities/example-minimal/` (ou `univ-rennes/` pour un exemple complet), remplissez vos valeurs, puis lancez avec `UNIVERSITY=<votre-id>`. Chaque feature (ADE, planning, Moodle, notes…) est optionnelle et se désactive proprement.
+
+Guide détaillé : [docs/ADDING_A_UNIVERSITY.md](docs/ADDING_A_UNIVERSITY.md)
 
 ## Sécurité & confidentialité
 
