@@ -34,6 +34,8 @@ export default {
   // Credentials of the official "Campus" mobile app, required by the ADE
   // mobile API. Reverse-engineered per university (see docs/ADDING_A_UNIVERSITY.md).
   ade: {
+    // Establishment code sent in the ADE login body.
+    etab: 'UR',
     passwordKey: 'jfkgltshGD6_"hrj',
     passwordIv: 'fgghjhgkdthykhjg',
     appHeaders: {

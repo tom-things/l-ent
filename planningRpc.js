@@ -1,10 +1,11 @@
+// Rennes defaults, kept while the dev backend in vite.config.js still calls
+// createPlanningRpcClient without options.
+// TODO(university-config): drop once the dev backend is unified with server.js.
 export const PLANNING_ORIGIN = 'https://planning.univ-rennes1.fr'
 export const PLANNING_SERVICE_URL = `${PLANNING_ORIGIN}/direct/myplanning.jsp`
 
 const DAY_MS = 24 * 60 * 60 * 1000
-const PLANNING_GWT_MODULE_BASE = `${PLANNING_ORIGIN}/direct/gwtdirectplanning/`
-const PLANNING_GWT_BOOTSTRAP_URL = `${PLANNING_GWT_MODULE_BASE}gwtdirectplanning.nocache.js`
-const PLANNING_GWT_CLIENT_ID = 'Z0pqq18'
+const DEFAULT_PLANNING_GWT_CLIENT_ID = 'Z0pqq18'
 const CONTEXT_CACHE_TTL_MS = 5 * 60 * 1000
 const CONTEXT_CACHE_STALE_MS = 55 * 60 * 1000
 const TREE_CACHE_TTL_MS = 30 * 60 * 1000
@@ -380,10 +381,10 @@ function buildPlanningTimetablePolicy(resolvedWeek) {
   }
 }
 
-function buildPlanningRpcHeaders(permutation) {
+function buildPlanningRpcHeaders(moduleBase, permutation) {
   return {
     'Content-Type': 'text/x-gwt-rpc; charset=utf-8',
-    'X-GWT-Module-Base': PLANNING_GWT_MODULE_BASE,
+    'X-GWT-Module-Base': moduleBase,
     'X-GWT-Permutation': permutation,
   }
 }
@@ -503,64 +504,64 @@ function summarizePlanningWeek(week) {
   }
 }
 
-function buildPlanningLoginBody(clientId, serializationPolicy) {
-  return `7|0|8|${PLANNING_GWT_MODULE_BASE}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.MyPlanningClientServiceProxy|method1login|J|com.adesoft.gwt.core.client.rpc.data.LoginRequest/3705388826|com.adesoft.gwt.directplan.client.rpc.data.DirectLoginRequest/635437471||1|2|3|4|2|5|6|${clientId}|7|0|0|0|1|1|8|8|-1|0|0|`
+function buildPlanningLoginBody(moduleBase, clientId, serializationPolicy) {
+  return `7|0|8|${moduleBase}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.MyPlanningClientServiceProxy|method1login|J|com.adesoft.gwt.core.client.rpc.data.LoginRequest/3705388826|com.adesoft.gwt.directplan.client.rpc.data.DirectLoginRequest/635437471||1|2|3|4|2|5|6|${clientId}|7|0|0|0|1|1|8|8|-1|0|0|`
 }
 
-function buildPlanningLoadProjectBody(clientId, serializationPolicy) {
-  return `7|0|7|${PLANNING_GWT_MODULE_BASE}|${serializationPolicy}|com.adesoft.gwt.core.client.rpc.WebClientServiceProxy|method6loadProject|J|I|Z|1|2|3|4|3|5|6|7|${clientId}|1|0|`
+function buildPlanningLoadProjectBody(moduleBase, clientId, serializationPolicy) {
+  return `7|0|7|${moduleBase}|${serializationPolicy}|com.adesoft.gwt.core.client.rpc.WebClientServiceProxy|method6loadProject|J|I|Z|1|2|3|4|3|5|6|7|${clientId}|1|0|`
 }
 
-function buildPlanningSavedPropertiesBody(clientId, serializationPolicy) {
-  return `7|0|6|${PLANNING_GWT_MODULE_BASE}|${serializationPolicy}|com.adesoft.gwt.core.client.rpc.WebClientServiceProxy|method26getSavedProperties|J|I|1|2|3|4|2|5|6|${clientId}|8|`
+function buildPlanningSavedPropertiesBody(moduleBase, clientId, serializationPolicy) {
+  return `7|0|6|${moduleBase}|${serializationPolicy}|com.adesoft.gwt.core.client.rpc.WebClientServiceProxy|method26getSavedProperties|J|I|1|2|3|4|2|5|6|${clientId}|8|`
 }
 
-function buildPlanningResourceFieldsBody(clientId, serializationPolicy) {
-  return `7|0|5|${PLANNING_GWT_MODULE_BASE}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.DirectPlanningServiceProxy|method3getResourceFields|J|1|2|3|4|1|5|${clientId}|`
+function buildPlanningResourceFieldsBody(moduleBase, clientId, serializationPolicy) {
+  return `7|0|5|${moduleBase}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.DirectPlanningServiceProxy|method3getResourceFields|J|1|2|3|4|1|5|${clientId}|`
 }
 
-function buildPlanningEventFieldsBody(clientId, serializationPolicy) {
-  return `7|0|5|${PLANNING_GWT_MODULE_BASE}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.DirectPlanningPlanningServiceProxy|method2getEventFields|J|1|2|3|4|1|5|${clientId}|`
+function buildPlanningEventFieldsBody(moduleBase, clientId, serializationPolicy) {
+  return `7|0|5|${moduleBase}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.DirectPlanningPlanningServiceProxy|method2getEventFields|J|1|2|3|4|1|5|${clientId}|`
 }
 
-function buildPlanningDisplayConfigurationBody(clientId, serializationPolicy) {
-  return `7|0|8|${PLANNING_GWT_MODULE_BASE}|${serializationPolicy}|com.adesoft.gwt.core.client.rpc.ConfigurationServiceProxy|method28getDisplayConfigurationByName|J|java.lang.String/2004016611|Z|web-default|1|2|3|4|3|5|6|7|${clientId}|8|0|`
+function buildPlanningDisplayConfigurationBody(moduleBase, clientId, serializationPolicy) {
+  return `7|0|8|${moduleBase}|${serializationPolicy}|com.adesoft.gwt.core.client.rpc.ConfigurationServiceProxy|method28getDisplayConfigurationByName|J|java.lang.String/2004016611|Z|web-default|1|2|3|4|3|5|6|7|${clientId}|8|0|`
 }
 
-function buildPlanningCalendarBody(clientId, serializationPolicy) {
-  return `7|0|8|${PLANNING_GWT_MODULE_BASE}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.DirectPlanningServiceProxy|method2getCalendar|J|java.lang.String/2004016611|Etc/GMT-1|Etc/GMT-2|1|2|3|4|4|5|6|6|6|${clientId}|7|7|8|`
+function buildPlanningCalendarBody(moduleBase, clientId, serializationPolicy) {
+  return `7|0|8|${moduleBase}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.DirectPlanningServiceProxy|method2getCalendar|J|java.lang.String/2004016611|Etc/GMT-1|Etc/GMT-2|1|2|3|4|4|5|6|6|6|${clientId}|7|7|8|`
 }
 
-function buildPlanningSetSqlModeBody(clientId, serializationPolicy, calendarString) {
-  return `7|0|8|${PLANNING_GWT_MODULE_BASE}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.DirectPlanningPlanningServiceProxy|method1setSqlMode|J|Z|java.lang.String/2004016611|${calendarString}|1|2|3|4|3|5|6|7|${clientId}|0|8|`
+function buildPlanningSetSqlModeBody(moduleBase, clientId, serializationPolicy, calendarString) {
+  return `7|0|8|${moduleBase}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.DirectPlanningPlanningServiceProxy|method1setSqlMode|J|Z|java.lang.String/2004016611|${calendarString}|1|2|3|4|3|5|6|7|${clientId}|0|8|`
 }
 
-function buildPlanningConnectedStudentBody(clientId, serializationPolicy) {
-  return `7|0|5|${PLANNING_GWT_MODULE_BASE}|${serializationPolicy}|com.adesoft.gwt.pac.client.rpc.PacServiceProxy|method2getConnectedStudent|J|1|2|3|4|1|5|${clientId}|`
+function buildPlanningConnectedStudentBody(moduleBase, clientId, serializationPolicy) {
+  return `7|0|5|${moduleBase}|${serializationPolicy}|com.adesoft.gwt.pac.client.rpc.PacServiceProxy|method2getConnectedStudent|J|1|2|3|4|1|5|${clientId}|`
 }
 
-function buildPlanningResourceIdsBody(clientId, serializationPolicy, identifier) {
-  return `7|0|13|${PLANNING_GWT_MODULE_BASE}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.DirectPlanningServiceProxy|method7getResourceIds|J|java.util.List|java.util.Map|Z|java.util.ArrayList/4159755760|java.util.HashMap/1797211028|com.adesoft.gwt.directplan.client.rpc.ResourceFieldCriteria/1324434193|java.lang.String/2004016611|${identifier}|1|2|3|4|4|5|6|7|8|${clientId}|9|0|10|1|11|1|9|1|12|13|0|`
+function buildPlanningResourceIdsBody(moduleBase, clientId, serializationPolicy, identifier) {
+  return `7|0|13|${moduleBase}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.DirectPlanningServiceProxy|method7getResourceIds|J|java.util.List|java.util.Map|Z|java.util.ArrayList/4159755760|java.util.HashMap/1797211028|com.adesoft.gwt.directplan.client.rpc.ResourceFieldCriteria/1324434193|java.lang.String/2004016611|${identifier}|1|2|3|4|4|5|6|7|8|${clientId}|9|0|10|1|11|1|9|1|12|13|0|`
 }
 
-function buildPlanningLegendsBody(clientId, serializationPolicy, displayConfigurationId, resourceId, weekIndex) {
-  return `7|0|13|${PLANNING_GWT_MODULE_BASE}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.DirectPlanningPlanningServiceProxy|method5getLegends|J|com.adesoft.gwt.core.client.rpc.data.planning.PlanningSelection/927838067|com.extjs.gxt.ui.client.data.SortInfo/1143517771|java.util.ArrayList/4159755760|java.lang.Integer/3438268394|Cumul|Déplacement|com.extjs.gxt.ui.client.Style$SortDir/3873584144|NAME|1|2|3|4|3|5|6|7|${clientId}|6|8|7|9|0|9|1|9|2|9|3|9|4|9|5|9|6|${displayConfigurationId}|10|11|0|0|8|1|9|${resourceId}|8|1|9|${weekIndex}|7|12|1|13|`
+function buildPlanningLegendsBody(moduleBase, clientId, serializationPolicy, displayConfigurationId, resourceId, weekIndex) {
+  return `7|0|13|${moduleBase}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.DirectPlanningPlanningServiceProxy|method5getLegends|J|com.adesoft.gwt.core.client.rpc.data.planning.PlanningSelection/927838067|com.extjs.gxt.ui.client.data.SortInfo/1143517771|java.util.ArrayList/4159755760|java.lang.Integer/3438268394|Cumul|Déplacement|com.extjs.gxt.ui.client.Style$SortDir/3873584144|NAME|1|2|3|4|3|5|6|7|${clientId}|6|8|7|9|0|9|1|9|2|9|3|9|4|9|5|9|6|${displayConfigurationId}|10|11|0|0|8|1|9|${resourceId}|8|1|9|${weekIndex}|7|12|1|13|`
 }
 
-function buildPlanningTimetableBody(clientId, serializationPolicy, displayConfigurationId, resourceId, weekIndex) {
-  return `7|0|13|${PLANNING_GWT_MODULE_BASE}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.DirectPlanningPlanningServiceProxy|method8getTimetable|J|com.adesoft.gwt.core.client.rpc.data.planning.PlanningSelection/927838067|I|Z|java.util.List|java.util.ArrayList/4159755760|java.lang.Integer/3438268394|Cumul|Déplacement|1|2|3|4|6|5|6|7|7|8|9|${clientId}|6|10|7|11|0|11|1|11|2|11|3|11|4|11|5|11|6|${displayConfigurationId}|12|13|0|0|10|1|11|${resourceId}|10|1|11|${weekIndex}|430|344|1|10|0|`
+function buildPlanningTimetableBody(moduleBase, clientId, serializationPolicy, displayConfigurationId, resourceId, weekIndex) {
+  return `7|0|13|${moduleBase}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.DirectPlanningPlanningServiceProxy|method8getTimetable|J|com.adesoft.gwt.core.client.rpc.data.planning.PlanningSelection/927838067|I|Z|java.util.List|java.util.ArrayList/4159755760|java.lang.Integer/3438268394|Cumul|Déplacement|1|2|3|4|6|5|6|7|7|8|9|${clientId}|6|10|7|11|0|11|1|11|2|11|3|11|4|11|5|11|6|${displayConfigurationId}|12|13|0|0|10|1|11|${resourceId}|10|1|11|${weekIndex}|430|344|1|10|0|`
 }
 
-function buildPlanningTreeRootBody(clientId, serializationPolicy) {
-  return `7|0|20|${PLANNING_GWT_MODULE_BASE}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.DirectPlanningServiceProxy|method4getChildren|J|java.lang.String/2004016611|com.adesoft.gwt.directplan.client.ui.tree.TreeResourceConfig/2234901663|${PLANNING_TREE_ROOT_CONFIG}|[I/2970817851|java.util.LinkedHashMap/3008245022|COLOR|com.adesoft.gwt.core.client.rpc.config.OutputField/870745015|LabelColor||com.adesoft.gwt.core.client.rpc.config.FieldType/1797283245|NAME|LabelName|java.util.ArrayList/4159755760|com.extjs.gxt.ui.client.data.SortInfo/1143517771|com.extjs.gxt.ui.client.Style$SortDir/3873584144|1|2|3|4|3|5|6|7|${clientId}|8|7|0|9|2|0|149|10|0|2|6|11|12|0|13|11|14|15|11|0|0|6|16|12|0|17|16|14|15|4|0|0|18|0|18|0|19|20|1|16|18|0|`
+function buildPlanningTreeRootBody(moduleBase, clientId, serializationPolicy) {
+  return `7|0|20|${moduleBase}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.DirectPlanningServiceProxy|method4getChildren|J|java.lang.String/2004016611|com.adesoft.gwt.directplan.client.ui.tree.TreeResourceConfig/2234901663|${PLANNING_TREE_ROOT_CONFIG}|[I/2970817851|java.util.LinkedHashMap/3008245022|COLOR|com.adesoft.gwt.core.client.rpc.config.OutputField/870745015|LabelColor||com.adesoft.gwt.core.client.rpc.config.FieldType/1797283245|NAME|LabelName|java.util.ArrayList/4159755760|com.extjs.gxt.ui.client.data.SortInfo/1143517771|com.extjs.gxt.ui.client.Style$SortDir/3873584144|1|2|3|4|3|5|6|7|${clientId}|8|7|0|9|2|0|149|10|0|2|6|11|12|0|13|11|14|15|11|0|0|6|16|12|0|17|16|14|15|4|0|0|18|0|18|0|19|20|1|16|18|0|`
 }
 
-function buildPlanningTreeChildrenBody(clientId, serializationPolicy, nodeConfig) {
-  return `7|0|20|${PLANNING_GWT_MODULE_BASE}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.DirectPlanningServiceProxy|method4getChildren|J|java.lang.String/2004016611|com.adesoft.gwt.directplan.client.ui.tree.TreeResourceConfig/2234901663|${nodeConfig}|[I/2970817851|java.util.LinkedHashMap/3008245022|COLOR|com.adesoft.gwt.core.client.rpc.config.OutputField/870745015|LabelColor||com.adesoft.gwt.core.client.rpc.config.FieldType/1797283245|NAME|LabelName|java.util.ArrayList/4159755760|com.extjs.gxt.ui.client.data.SortInfo/1143517771|com.extjs.gxt.ui.client.Style$SortDir/3873584144|1|2|3|4|3|5|6|7|${clientId}|8|7|0|9|2|-1|-1|10|0|2|6|11|12|0|13|11|14|15|11|0|0|6|16|12|0|17|16|14|15|4|0|0|18|0|18|0|19|20|1|16|18|0|`
+function buildPlanningTreeChildrenBody(moduleBase, clientId, serializationPolicy, nodeConfig) {
+  return `7|0|20|${moduleBase}|${serializationPolicy}|com.adesoft.gwt.directplan.client.rpc.DirectPlanningServiceProxy|method4getChildren|J|java.lang.String/2004016611|com.adesoft.gwt.directplan.client.ui.tree.TreeResourceConfig/2234901663|${nodeConfig}|[I/2970817851|java.util.LinkedHashMap/3008245022|COLOR|com.adesoft.gwt.core.client.rpc.config.OutputField/870745015|LabelColor||com.adesoft.gwt.core.client.rpc.config.FieldType/1797283245|NAME|LabelName|java.util.ArrayList/4159755760|com.extjs.gxt.ui.client.data.SortInfo/1143517771|com.extjs.gxt.ui.client.Style$SortDir/3873584144|1|2|3|4|3|5|6|7|${clientId}|8|7|0|9|2|-1|-1|10|0|2|6|11|12|0|13|11|14|15|11|0|0|6|16|12|0|17|16|14|15|4|0|0|18|0|18|0|19|20|1|16|18|0|`
 }
 
-function buildPlanningSearchDataByIdBody(clientId, serializationPolicy, resourceId) {
-  return `7|0|9|${PLANNING_GWT_MODULE_BASE}|${serializationPolicy}|com.adesoft.gwt.core.client.rpc.ConfigurationServiceProxy|method25searchDataById|J|com.adesoft.gwt.core.client.rpc.config.FilterType/1396315430|java.util.List|java.util.ArrayList/4159755760|java.lang.Integer/3438268394|1|2|3|4|3|5|6|7|${clientId}|6|3|8|1|9|${resourceId}|`
+function buildPlanningSearchDataByIdBody(moduleBase, clientId, serializationPolicy, resourceId) {
+  return `7|0|9|${moduleBase}|${serializationPolicy}|com.adesoft.gwt.core.client.rpc.ConfigurationServiceProxy|method25searchDataById|J|com.adesoft.gwt.core.client.rpc.config.FilterType/1396315430|java.util.List|java.util.ArrayList/4159755760|java.lang.Integer/3438268394|1|2|3|4|3|5|6|7|${clientId}|6|3|8|1|9|${resourceId}|`
 }
 
 function parseLegendDateLabel(label) {
@@ -1151,6 +1152,8 @@ export function createPlanningRpcClient({
   casOrigin,
   fetchWithJar,
   followRedirectChain,
+  planningOrigin = PLANNING_ORIGIN,
+  gwtClientId = DEFAULT_PLANNING_GWT_CLIENT_ID,
 }) {
   if (typeof casOrigin !== 'string' || !casOrigin) {
     throw new TypeError('createPlanningRpcClient requires a casOrigin string.')
@@ -1159,6 +1162,10 @@ export function createPlanningRpcClient({
   if (typeof fetchWithJar !== 'function' || typeof followRedirectChain !== 'function') {
     throw new TypeError('createPlanningRpcClient requires fetchWithJar and followRedirectChain functions.')
   }
+
+  const serviceUrl = `${planningOrigin}/direct/myplanning.jsp`
+  const moduleBase = `${planningOrigin}/direct/gwtdirectplanning/`
+  const bootstrapUrl = `${moduleBase}gwtdirectplanning.nocache.js`
 
   const contextCache = createPlanningCacheStore(PLANNING_CACHE_LIMITS.context)
   const treeCache = createPlanningCacheStore(PLANNING_CACHE_LIMITS.tree)
@@ -1171,7 +1178,7 @@ export function createPlanningRpcClient({
     }
 
     planningMetadataPromise = (async () => {
-      const response = await fetchWithJar(PLANNING_GWT_BOOTSTRAP_URL, jar, {
+      const response = await fetchWithJar(bootstrapUrl, jar, {
         headers: {
           Accept: 'application/javascript,text/javascript,*/*;q=0.9',
         },
@@ -1188,7 +1195,7 @@ export function createPlanningRpcClient({
       let serializationPolicies = PLANNING_GWT_FALLBACK_SERIALIZATION_POLICIES
 
       try {
-        const cacheResponse = await fetchWithJar(`${PLANNING_GWT_MODULE_BASE}${selectedPermutation}.cache.html`, jar, {
+        const cacheResponse = await fetchWithJar(`${moduleBase}${selectedPermutation}.cache.html`, jar, {
           headers: {
             Accept: 'text/html,application/xhtml+xml,*/*;q=0.9',
           },
@@ -1221,9 +1228,9 @@ export function createPlanningRpcClient({
   }
 
   async function postPlanningRpc(jar, serviceName, permutation, body) {
-    const response = await fetchWithJar(`${PLANNING_GWT_MODULE_BASE}${serviceName}`, jar, {
+    const response = await fetchWithJar(`${moduleBase}${serviceName}`, jar, {
       method: 'POST',
-      headers: buildPlanningRpcHeaders(permutation),
+      headers: buildPlanningRpcHeaders(moduleBase, permutation),
       body,
       redirect: 'follow',
     })
@@ -1246,19 +1253,19 @@ export function createPlanningRpcClient({
   }
 
   async function initializePlanningRpcContext(jar) {
-    const clientId = PLANNING_GWT_CLIENT_ID
+    const clientId = gwtClientId
     const {
       permutations,
       serializationPolicies,
     } = await getPlanningRpcMetadata(jar)
     const acceptHeader = 'text/html,application/xhtml+xml,*/*'
-    const casLoginUrl = `${casOrigin}/login?service=${encodeURIComponent(PLANNING_SERVICE_URL)}`
+    const casLoginUrl = `${casOrigin}/login?service=${encodeURIComponent(serviceUrl)}`
     const casResult = await followRedirectChain(casLoginUrl, jar, {
       headers: { Accept: acceptHeader },
     })
     await casResult.response.text()
 
-    const loginResult = await postPlanningRpc(jar, 'MyPlanningClientServiceProxy', permutations.myPlanning, buildPlanningLoginBody(clientId, serializationPolicies.myPlanning))
+    const loginResult = await postPlanningRpc(jar, 'MyPlanningClientServiceProxy', permutations.myPlanning, buildPlanningLoginBody(moduleBase, clientId, serializationPolicies.myPlanning))
     ensurePlanningRpcOk(loginResult, 'Planning login')
 
     const planningIdentifier = parsePlanningIdentifier(loginResult.text)
@@ -1266,19 +1273,19 @@ export function createPlanningRpcClient({
       throw new Error(`Could not extract planning identifier from login response: ${loginResult.text.slice(0, 240)}`)
     }
 
-    const loadProjectResult = await postPlanningRpc(jar, 'WebClientServiceProxy', permutations.webClient, buildPlanningLoadProjectBody(clientId, serializationPolicies.webClient))
+    const loadProjectResult = await postPlanningRpc(jar, 'WebClientServiceProxy', permutations.webClient, buildPlanningLoadProjectBody(moduleBase, clientId, serializationPolicies.webClient))
     ensurePlanningRpcOk(loadProjectResult, 'Planning project load')
 
-    const savedPropertiesResult = await postPlanningRpc(jar, 'WebClientServiceProxy', permutations.webClient, buildPlanningSavedPropertiesBody(clientId, serializationPolicies.webClient))
+    const savedPropertiesResult = await postPlanningRpc(jar, 'WebClientServiceProxy', permutations.webClient, buildPlanningSavedPropertiesBody(moduleBase, clientId, serializationPolicies.webClient))
     ensurePlanningRpcOk(savedPropertiesResult, 'Planning saved properties')
 
-    const resourceFieldsResult = await postPlanningRpc(jar, 'DirectPlanningServiceProxy', permutations.directPlanning, buildPlanningResourceFieldsBody(clientId, serializationPolicies.directPlanning))
+    const resourceFieldsResult = await postPlanningRpc(jar, 'DirectPlanningServiceProxy', permutations.directPlanning, buildPlanningResourceFieldsBody(moduleBase, clientId, serializationPolicies.directPlanning))
     ensurePlanningRpcOk(resourceFieldsResult, 'Planning resource fields')
 
-    const eventFieldsResult = await postPlanningRpc(jar, 'DirectPlanningPlanningServiceProxy', permutations.directPlanningPlanning, buildPlanningEventFieldsBody(clientId, serializationPolicies.directPlanningPlanning))
+    const eventFieldsResult = await postPlanningRpc(jar, 'DirectPlanningPlanningServiceProxy', permutations.directPlanningPlanning, buildPlanningEventFieldsBody(moduleBase, clientId, serializationPolicies.directPlanningPlanning))
     ensurePlanningRpcOk(eventFieldsResult, 'Planning event fields')
 
-    const displayConfigurationResult = await postPlanningRpc(jar, 'ConfigurationServiceProxy', permutations.configuration, buildPlanningDisplayConfigurationBody(clientId, serializationPolicies.configuration))
+    const displayConfigurationResult = await postPlanningRpc(jar, 'ConfigurationServiceProxy', permutations.configuration, buildPlanningDisplayConfigurationBody(moduleBase, clientId, serializationPolicies.configuration))
     ensurePlanningRpcOk(displayConfigurationResult, 'Planning display configuration')
 
     const displayConfigurationId = parsePlanningFirstInteger(displayConfigurationResult.text)
@@ -1286,10 +1293,10 @@ export function createPlanningRpcClient({
       throw new Error(`Could not extract planning display configuration id: ${displayConfigurationResult.text.slice(0, 240)}`)
     }
 
-    const connectedStudentResult = await postPlanningRpc(jar, 'PacServiceProxy', permutations.pac, buildPlanningConnectedStudentBody(clientId, serializationPolicies.pac))
+    const connectedStudentResult = await postPlanningRpc(jar, 'PacServiceProxy', permutations.pac, buildPlanningConnectedStudentBody(moduleBase, clientId, serializationPolicies.pac))
     ensurePlanningRpcOk(connectedStudentResult, 'Planning connected student')
 
-    const calendarResult = await postPlanningRpc(jar, 'DirectPlanningServiceProxy', permutations.directPlanning, buildPlanningCalendarBody(clientId, serializationPolicies.directPlanning))
+    const calendarResult = await postPlanningRpc(jar, 'DirectPlanningServiceProxy', permutations.directPlanning, buildPlanningCalendarBody(moduleBase, clientId, serializationPolicies.directPlanning))
     ensurePlanningRpcOk(calendarResult, 'Planning calendar')
 
     const calendarString = extractPlanningCalendarString(calendarResult.text)
@@ -1297,10 +1304,10 @@ export function createPlanningRpcClient({
       throw new Error('Could not extract planning calendar data.')
     }
 
-    const sqlModeResult = await postPlanningRpc(jar, 'DirectPlanningPlanningServiceProxy', permutations.directPlanningPlanning, buildPlanningSetSqlModeBody(clientId, serializationPolicies.directPlanningPlanning, calendarString))
+    const sqlModeResult = await postPlanningRpc(jar, 'DirectPlanningPlanningServiceProxy', permutations.directPlanningPlanning, buildPlanningSetSqlModeBody(moduleBase, clientId, serializationPolicies.directPlanningPlanning, calendarString))
     ensurePlanningRpcOk(sqlModeResult, 'Planning SQL mode')
 
-    const resourceIdsResult = await postPlanningRpc(jar, 'DirectPlanningServiceProxy', permutations.directPlanning, buildPlanningResourceIdsBody(clientId, serializationPolicies.directPlanning, planningIdentifier))
+    const resourceIdsResult = await postPlanningRpc(jar, 'DirectPlanningServiceProxy', permutations.directPlanning, buildPlanningResourceIdsBody(moduleBase, clientId, serializationPolicies.directPlanning, planningIdentifier))
     ensurePlanningRpcOk(resourceIdsResult, 'Planning resource ids')
 
     const resourceId = parsePlanningFirstInteger(resourceIdsResult.text)
@@ -1375,12 +1382,12 @@ export function createPlanningRpcClient({
         cacheKey,
         policy: cachePolicy,
         loadValue: async () => {
-          const legendsResult = await postPlanningRpc(jar, 'DirectPlanningPlanningServiceProxy', context.permutations.directPlanningPlanning, buildPlanningLegendsBody(context.clientId, context.serializationPolicies.directPlanningPlanning, context.displayConfigurationId, resourceId, planningSelectionWeekIndex))
+          const legendsResult = await postPlanningRpc(jar, 'DirectPlanningPlanningServiceProxy', context.permutations.directPlanningPlanning, buildPlanningLegendsBody(moduleBase, context.clientId, context.serializationPolicies.directPlanningPlanning, context.displayConfigurationId, resourceId, planningSelectionWeekIndex))
           ensurePlanningRpcOk(legendsResult, 'Planning legends')
 
           const legends = extractPlanningLegends(legendsResult.text)
 
-          const timetableResult = await postPlanningRpc(jar, 'DirectPlanningPlanningServiceProxy', context.permutations.directPlanningPlanning, buildPlanningTimetableBody(context.clientId, context.serializationPolicies.directPlanningPlanning, context.displayConfigurationId, resourceId, planningSelectionWeekIndex))
+          const timetableResult = await postPlanningRpc(jar, 'DirectPlanningPlanningServiceProxy', context.permutations.directPlanningPlanning, buildPlanningTimetableBody(moduleBase, context.clientId, context.serializationPolicies.directPlanningPlanning, context.displayConfigurationId, resourceId, planningSelectionWeekIndex))
           ensurePlanningRpcOk(timetableResult, 'Planning timetable')
 
           const events = extractPlanningTimetableEvents(timetableResult.text, legends.dayLabels)
@@ -1431,14 +1438,14 @@ export function createPlanningRpcClient({
         cacheKey,
         policy: cachePolicy,
         loadValue: async () => {
-          const rootTreeResult = await postPlanningRpc(jar, 'DirectPlanningServiceProxy', context.permutations.directPlanning, buildPlanningTreeRootBody(context.clientId, context.serializationPolicies.directPlanning))
+          const rootTreeResult = await postPlanningRpc(jar, 'DirectPlanningServiceProxy', context.permutations.directPlanning, buildPlanningTreeRootBody(moduleBase, context.clientId, context.serializationPolicies.directPlanning))
           ensurePlanningRpcOk(rootTreeResult, 'Planning tree root')
 
           let mergedTreeRoot = parsePlanningTreeResponse(rootTreeResult.text)
           let currentPathIds = []
 
           if (Number.isInteger(focusResourceId)) {
-            const pathResult = await postPlanningRpc(jar, 'ConfigurationServiceProxy', context.permutations.configuration, buildPlanningSearchDataByIdBody(context.clientId, context.serializationPolicies.configuration, focusResourceId))
+            const pathResult = await postPlanningRpc(jar, 'ConfigurationServiceProxy', context.permutations.configuration, buildPlanningSearchDataByIdBody(moduleBase, context.clientId, context.serializationPolicies.configuration, focusResourceId))
             ensurePlanningRpcOk(pathResult, 'Planning tree current path')
 
             currentPathIds = extractPlanningTreePathIds(pathResult.text)
@@ -1457,7 +1464,7 @@ export function createPlanningRpcClient({
                 jar,
                 'DirectPlanningServiceProxy',
                 context.permutations.directPlanning,
-                buildPlanningTreeChildrenBody(context.clientId, context.serializationPolicies.directPlanning, pathNode.configString),
+                buildPlanningTreeChildrenBody(moduleBase, context.clientId, context.serializationPolicies.directPlanning, pathNode.configString),
               )
               ensurePlanningRpcOk(childrenResult, `Planning tree children for ${pathNode.id}`)
               mergedTreeRoot = replacePlanningTreeNode(mergedTreeRoot, parsePlanningTreeResponse(childrenResult.text))

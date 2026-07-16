@@ -1,12 +1,17 @@
 import { createCipheriv } from 'node:crypto'
 import { Buffer } from 'node:buffer'
 
+// Default values match Université de Rennes; every deployment should pass its
+// own university's values to createAdeApiClient (see universities/<id>/server.js).
+// TODO(university-config): drop these defaults once the dev backend in
+// vite.config.js is unified with server.js.
 const DEFAULT_ADE_ORIGIN = 'https://campus-app.univ-rennes.fr'
 const ADE_SESSION_TTL_MS = 30 * 60 * 1000
 const ADE_UPCOMING_TTL_MS = 5 * 60 * 1000
-const ADE_PASSWORD_KEY = 'jfkgltshGD6_"hrj'
-const ADE_PASSWORD_IV = 'fgghjhgkdthykhjg'
-const ADE_APP_HEADERS = {
+const DEFAULT_ADE_PASSWORD_KEY = 'jfkgltshGD6_"hrj'
+const DEFAULT_ADE_PASSWORD_IV = 'fgghjhgkdthykhjg'
+const DEFAULT_ADE_ETAB = 'UR'
+const DEFAULT_ADE_APP_HEADERS = {
   Accept: 'application/json',
   'content-type': 'application/json',
   session: 'null',
@@ -108,19 +113,19 @@ function labelsMatch(left, right) {
     || normalizedRight.endsWith(` ${normalizedLeft}`)
 }
 
-export function buildAdeAppHeaders(session = 'null', extraHeaders = {}) {
+export function buildAdeAppHeaders(session = 'null', extraHeaders = {}, appHeaders = DEFAULT_ADE_APP_HEADERS) {
   return {
-    ...ADE_APP_HEADERS,
+    ...appHeaders,
     session: session || 'null',
     ...extraHeaders,
   }
 }
 
-export function encryptAdePassword(password) {
+export function encryptAdePassword(password, passwordKey = DEFAULT_ADE_PASSWORD_KEY, passwordIv = DEFAULT_ADE_PASSWORD_IV) {
   const cipher = createCipheriv(
     'aes-128-cbc',
-    Buffer.from(ADE_PASSWORD_KEY, 'utf8'),
-    Buffer.from(ADE_PASSWORD_IV, 'utf8'),
+    Buffer.from(passwordKey, 'utf8'),
+    Buffer.from(passwordIv, 'utf8'),
   )
 
   return Buffer.concat([
@@ -383,13 +388,17 @@ export function createAdeApiClient({
   casOrigin = null,
   fetchImpl = fetch,
   followRedirectChain = null,
+  passwordKey = DEFAULT_ADE_PASSWORD_KEY,
+  passwordIv = DEFAULT_ADE_PASSWORD_IV,
+  appHeaders = DEFAULT_ADE_APP_HEADERS,
+  etab = DEFAULT_ADE_ETAB,
 } = {}) {
   const adeApiBase = `${adeOrigin}/api`
 
   async function fetchAdeApi(path, session, extraHeaders = {}) {
     const url = `${adeApiBase}${path}`
     const response = await fetchImpl(url, {
-      headers: buildAdeAppHeaders(session, extraHeaders),
+      headers: buildAdeAppHeaders(session, extraHeaders, appHeaders),
     })
     const text = await response.text()
     const data = readJsonSafely(text) ?? text
@@ -438,11 +447,11 @@ export function createAdeApiClient({
     if (credentials?.username && credentials?.password) {
       const loginResponse = await fetchImpl(`${adeApiBase}/auth/login`, {
         method: 'POST',
-        headers: buildAdeAppHeaders('null'),
+        headers: buildAdeAppHeaders('null', {}, appHeaders),
         body: JSON.stringify({
           username: normalizeAdeUsername(credentials.username),
-          password: encryptAdePassword(credentials.password),
-          etab: credentials.etab ?? 'UR',
+          password: encryptAdePassword(credentials.password, passwordKey, passwordIv),
+          etab: credentials.etab ?? etab,
         }),
       })
       const loginText = await loginResponse.text()
@@ -506,7 +515,7 @@ export function createAdeApiClient({
       if (ticket) {
         const loginResponse = await fetchImpl(`${adeApiBase}/auth/login`, {
           method: 'POST',
-          headers: buildAdeAppHeaders('null'),
+          headers: buildAdeAppHeaders('null', {}, appHeaders),
           body: JSON.stringify({
             ticket,
             service: actualServiceUrl,

@@ -33,6 +33,7 @@ import {
   searchDemoAdeTree,
 } from './src/demoAccount.js'
 import { GRADES_UNAVAILABLE_MESSAGE } from './src/gradeFeatureState.js'
+import { loadServerConfig } from './universities/index.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -40,15 +41,32 @@ const app = express()
 const PORT = process.env.PORT || 3000
 
 // ============================================================================
-// ENT Auth Configs & Utilities (Copied directly from earlier vite.config.js)
+// University configuration (universities/<id>/server.js, picked by UNIVERSITY)
 // ============================================================================
-const ENT_ORIGIN = 'https://services-numeriques.univ-rennes.fr'
-const CAS_ORIGIN = 'https://sso-cas.univ-rennes.fr'
-const ADE_ORIGIN = 'https://campus-app.univ-rennes.fr'
-const MOODLE_ORIGIN = 'https://foad.univ-rennes.fr'
-const MOODLE_SHIBBOLETH_LOGIN_URL = `${MOODLE_ORIGIN}/auth/shibboleth/index.php`
-const RENNES_WAYF_ENTITY_ID = 'urn:mace:cru.fr:federation:univ-rennes1.fr'
-const DEFAULT_REFERER = `${ENT_ORIGIN}/f/services/normal/render.uP`
+const universityConfig = await loadServerConfig()
+const FEATURES = universityConfig.features ?? {}
+
+const ENT_ORIGIN = universityConfig.origins.ent
+const CAS_ORIGIN = universityConfig.origins.cas
+const ADE_ORIGIN = universityConfig.origins.ade ?? null
+const MOODLE_ORIGIN = universityConfig.origins.moodle ?? null
+const PLANNING_ORIGIN = universityConfig.origins.planning ?? null
+
+const ENT_HOST = new URL(ENT_ORIGIN).hostname
+const CAS_HOST = new URL(CAS_ORIGIN).hostname
+const MOODLE_HOST = MOODLE_ORIGIN ? new URL(MOODLE_ORIGIN).hostname : null
+const PLANNING_HOST = PLANNING_ORIGIN ? new URL(PLANNING_ORIGIN).hostname : null
+
+const PORTAL_ENTRY_URL = `${ENT_ORIGIN}${universityConfig.auth.portalEntryPath}`
+const MOODLE_SHIBBOLETH_LOGIN_URL = MOODLE_ORIGIN
+  ? `${MOODLE_ORIGIN}${universityConfig.moodle?.shibbolethLoginPath ?? '/auth/shibboleth/index.php'}`
+  : null
+const WAYF_ENTITY_ID = universityConfig.moodle?.wayfEntityId ?? null
+const DEFAULT_REFERER = PORTAL_ENTRY_URL
+
+function isCasHost(hostname) {
+  return Boolean(hostname) && hostname === CAS_HOST
+}
 const LOCAL_SESSION_COOKIE = 'ent_front_session'
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000
 const GRADES_CACHE_TTL_MS = 10 * 60 * 1000
@@ -267,7 +285,7 @@ function isPersistableSessionCookie([, cookie]) {
     return false
   }
 
-  if (cookie.domain === 'sso-cas.univ-rennes.fr' && cookie.name === 'TGC') {
+  if (cookie.domain === CAS_HOST && cookie.name === 'TGC') {
     return false
   }
 
@@ -617,7 +635,7 @@ async function performEntLogin({ username, password }) {
   const jar = new CookieJar()
   const acceptHeader = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
 
-  const loginPageResult = await followRedirectChain(`${ENT_ORIGIN}/f/services/normal/render.uP`, jar, {
+  const loginPageResult = await followRedirectChain(PORTAL_ENTRY_URL, jar, {
     headers: {
       Accept: acceptHeader,
     },
@@ -697,7 +715,7 @@ function getSessionLaunchCapabilities(session) {
     }
   }
 
-  const canUseServerLaunch = Boolean(session?.jar?.hasCookie('sso-cas.univ-rennes.fr', 'TGC'))
+  const canUseServerLaunch = Boolean(session?.jar?.hasCookie(CAS_HOST, 'TGC'))
 
   return {
     canUseServerLaunch,
@@ -755,11 +773,12 @@ function escapeHtmlAttribute(value) {
 }
 
 function isMoodleLaunchTarget(targetUrl) {
-  return getHostnameFromUrl(targetUrl) === 'foad.univ-rennes.fr'
+  return Boolean(MOODLE_HOST) && FEATURES.moodle !== false
+    && getHostnameFromUrl(targetUrl) === MOODLE_HOST
 }
 
 function isMoodleShibbolethPostTarget(targetUrl) {
-  return getHostnameFromUrl(targetUrl) === 'foad.univ-rennes.fr'
+  return isMoodleLaunchTarget(targetUrl)
     && /\/Shibboleth\.sso\//i.test(new URL(targetUrl).pathname)
 }
 
@@ -774,7 +793,7 @@ function buildMoodleWayfRequest(pageUrl) {
       Referer: pageUrl.url,
     },
     body: new URLSearchParams({
-      user_idp: RENNES_WAYF_ENTITY_ID,
+      user_idp: WAYF_ENTITY_ID,
       Select: 'Sélection',
     }).toString(),
   }
@@ -902,7 +921,7 @@ async function prepareMoodleLaunchRelay(session) {
     }
 
     const casLoginRequest = buildCasLoginRequest(html, currentUrl, session.credentials, acceptHeader)
-    if (casLoginRequest && getHostnameFromUrl(casLoginRequest.actionUrl).includes('sso-cas')) {
+    if (casLoginRequest && isCasHost(getHostnameFromUrl(casLoginRequest.actionUrl))) {
       currentUrl = casLoginRequest.actionUrl
       currentMethod = 'POST'
       currentBody = casLoginRequest.body
@@ -933,7 +952,7 @@ async function prepareMoodleBrowserBootstrap(credentials) {
   const wayfPageHtml = await wayfPageResult.response.text()
   const wayfActionUrl = extractFormAction(wayfPageHtml, wayfPageResult.finalUrl)
   const wayfBody = new URLSearchParams({
-    user_idp: RENNES_WAYF_ENTITY_ID,
+    user_idp: WAYF_ENTITY_ID,
     Select: 'Sélection',
   }).toString()
 
@@ -1126,7 +1145,7 @@ async function previewServerLaunch(targetUrl, session) {
         const nextUrl = resolveUrl(location, currentUrl)
         const nextHost = getHostnameFromUrl(nextUrl)
 
-        if (!currentHost.includes('sso-cas') && nextHost.includes('sso-cas')) {
+        if (!isCasHost(currentHost) && isCasHost(nextHost)) {
           return {
             finalUrl: nextUrl,
             chain,
@@ -1136,7 +1155,7 @@ async function previewServerLaunch(targetUrl, session) {
           }
         }
 
-        if (currentHost.includes('sso-cas') && !nextHost.includes('sso-cas')) {
+        if (isCasHost(currentHost) && !isCasHost(nextHost)) {
           if (nextHost === targetHost) {
             return {
               finalUrl: nextUrl,
@@ -1166,7 +1185,7 @@ async function previewServerLaunch(targetUrl, session) {
       if (htmlRedirect) {
         const nextHost = getHostnameFromUrl(htmlRedirect)
 
-        if (!currentHost.includes('sso-cas') && nextHost.includes('sso-cas')) {
+        if (!isCasHost(currentHost) && isCasHost(nextHost)) {
           return {
             finalUrl: htmlRedirect,
             chain,
@@ -1184,7 +1203,7 @@ async function previewServerLaunch(targetUrl, session) {
       if (autoSubmitForm) {
         const actionHost = getHostnameFromUrl(autoSubmitForm.action)
 
-        if (actionHost.includes('sso-cas')) {
+        if (isCasHost(actionHost)) {
           return {
             finalUrl: autoSubmitForm.action,
             chain,
@@ -1508,6 +1527,8 @@ const {
   casOrigin: CAS_ORIGIN,
   fetchWithJar,
   followRedirectChain,
+  planningOrigin: PLANNING_ORIGIN ?? undefined,
+  gwtClientId: universityConfig.planning?.gwtClientId,
 })
 
 const {
@@ -1516,9 +1537,13 @@ const {
   fetchAdeApi,
   fetchAdeUpcomingFromApi,
 } = createAdeApiClient({
-  adeOrigin: ADE_ORIGIN,
+  adeOrigin: ADE_ORIGIN ?? undefined,
   casOrigin: CAS_ORIGIN,
   followRedirectChain,
+  passwordKey: universityConfig.ade?.passwordKey,
+  passwordIv: universityConfig.ade?.passwordIv,
+  appHeaders: universityConfig.ade?.appHeaders,
+  etab: universityConfig.ade?.etab,
 })
 
 const {
@@ -1539,6 +1564,24 @@ app.use(express.json()) // Automatically parse incoming JSON requests for auth e
 app.use((req, res, next) => {
   if (req.path.startsWith('/__ent_auth') || req.path.startsWith('/__ent_proxy')) {
     res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive')
+  }
+
+  next()
+})
+
+// Feature gate: universities without a given service get a clean "disabled"
+// response instead of a failed upstream call (see universities/<id>/shared.js).
+const FEATURE_GATED_PREFIXES = [
+  ['/__ent_auth/ade', 'ade'],
+  ['/__ent_auth/planning', 'planning'],
+  ['/__ent_auth/grades', 'grades'],
+]
+
+app.use((req, res, next) => {
+  for (const [prefix, feature] of FEATURE_GATED_PREFIXES) {
+    if ((req.path === prefix || req.path.startsWith(`${prefix}/`)) && !FEATURES[feature]) {
+      return res.status(404).json({ ok: false, disabled: true, feature })
+    }
   }
 
   next()
@@ -1598,8 +1641,8 @@ app.get('/__ent_auth/session', async (req, res) => {
       user: layout.data.user,
       sessionMode: session.mode ?? null,
       sessionSource: session.sessionSource ?? null,
-      cookieNames: session.jar.getCookieNamesForHost('services-numeriques.univ-rennes.fr'),
-      casCookieNames: session.jar.getCookieNamesForHost('sso-cas.univ-rennes.fr'),
+      cookieNames: session.jar.getCookieNamesForHost(ENT_HOST),
+      casCookieNames: session.jar.getCookieNamesForHost(CAS_HOST),
       ...launchCapabilities,
     })
   } catch (error) {
@@ -1629,7 +1672,7 @@ app.post('/__ent_auth/login', async (req, res) => {
       })
     }
 
-    if (isDemoCredentials(username, password)) {
+    if (FEATURES.demo !== false && isDemoCredentials(username, password)) {
       const session = createDemoSession()
       clearLoginRateLimit(req, username)
       setSessionCookie(res, session)
@@ -1810,7 +1853,7 @@ app.get('/__ent_auth/planning', async (req, res) => {
         requestedDateMatched: timetable.requestedDateMatched,
         outOfRange: timetable.outOfRange,
         cache: timetable.cache,
-        planningCookies: session.jar.getCookieNamesForHost('planning.univ-rennes1.fr'),
+        planningCookies: session.jar.getCookieNamesForHost(PLANNING_HOST),
       },
     })
   } catch (error) {
@@ -1978,7 +2021,7 @@ app.get('/__ent_auth/launch', async (req, res) => {
       const currentHost = new URL(currentUrl).hostname
       const nextHost = new URL(nextUrl).hostname
 
-      if (currentHost.includes('sso-cas') && !nextHost.includes('sso-cas')) {
+      if (isCasHost(currentHost) && !isCasHost(nextHost)) {
         if (nextHost === targetHost) {
           // Simple CAS flow: CAS redirects directly to the target → exit with ticket
           if (debug) return res.json({ finalUrl: nextUrl, chain })
@@ -2136,7 +2179,7 @@ app.get('/__ent_auth/ade/calendar', async (req, res) => {
       authenticated: true,
       sessionMode: entSession.mode ?? null,
       calendar: {
-        source: 'planning.univ-rennes1.fr',
+        source: PLANNING_HOST,
         resourceId: calendar.resourceId,
         currentResourceId: calendar.currentResourceId,
         requestedResourceId: calendar.requestedResourceId,
@@ -2192,7 +2235,7 @@ app.get('/__ent_auth/ade/tree', async (req, res) => {
       authenticated: true,
       sessionMode: entSession.mode ?? null,
       tree: {
-        source: 'planning.univ-rennes1.fr',
+        source: PLANNING_HOST,
         root: tree.root,
         currentResourceId: tree.currentResourceId,
         focusResourceId: tree.focusResourceId,
@@ -2287,7 +2330,7 @@ app.get('/__ent_auth/ade/timetable', async (req, res) => {
       authenticated: true,
       sessionMode: entSession.mode ?? null,
       timetable: {
-        source: 'planning.univ-rennes1.fr',
+        source: PLANNING_HOST,
         date: requestedDate,
         resourceId: timetable.resourceId,
         weekLabel: timetable.weekLabel,
