@@ -2,6 +2,8 @@
 // Everything in this file is bundled into the browser build: no secrets here.
 // This is the reference implementation forks should copy (see docs/ADDING_A_UNIVERSITY.md).
 import logo from './assets/logo.svg'
+import lockup from './assets/lockup.svg'
+import lockupDark from './assets/lockup-dark.svg'
 import { getAppIcon } from './app-icons/index.js'
 import {
   id,
@@ -23,6 +25,10 @@ export default {
   branding: {
     ...branding,
     logo,
+    // Bespoke "l'ent × Université de Rennes" artwork for the sidebar/header.
+    // Universities without one get an auto-composed l'ent + logo lockup.
+    lockup,
+    lockupDark,
   },
 
   // Optional help links (login page + account modal); omit an entry to hide it.

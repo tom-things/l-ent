@@ -1,8 +1,7 @@
 import { useCallback, useState } from 'react'
 import { Icon } from '@iconify/react'
 import universityConfig from '@university'
-import lentLogo from '../assets/lentlogo.svg'
-import lentLogoDark from '../assets/lentlogo-dark.svg'
+import UniversityLockup from './UniversityLockup'
 import UpdateNotice from './UpdateNotice'
 import { ENT_AUTH_PREFIX } from '../entApi'
 import { GRADES_UNAVAILABLE_DETAIL, GRADES_UNAVAILABLE_TITLE } from '../gradeFeatureState'
@@ -11,7 +10,6 @@ const PLANNING_SERVICE_URL = universityConfig.planning?.serviceUrl ?? null
 const PLANNING_HREF = PLANNING_SERVICE_URL
   ? `${ENT_AUTH_PREFIX}/launch?url=${encodeURIComponent(PLANNING_SERVICE_URL)}`
   : null
-const SIDEBAR_LOGO_ALT = universityConfig.branding.sidebarLogoAlt ?? universityConfig.branding.appName
 
 function buildNavItems(establishment) {
   const showGradesNav = Boolean(universityConfig.features?.grades)
@@ -103,16 +101,7 @@ function Sidebar({
           className="inline-flex items-center no-underline"
           aria-label="Retour à l'accueil"
         >
-          <img
-            src={lentLogo}
-            alt={SIDEBAR_LOGO_ALT}
-            className="block h-[58px] w-auto dark:hidden"
-          />
-          <img
-            src={lentLogoDark}
-            alt={SIDEBAR_LOGO_ALT}
-            className="hidden h-[58px] w-auto dark:block"
-          />
+          <UniversityLockup variant="sidebar" />
         </a>
 
         <nav className="flex flex-col w-full" aria-label="Sections">

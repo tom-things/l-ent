@@ -2,10 +2,11 @@
 
 l'ent est conçu pour être forké : toute la configuration propre à une université vit dans un seul dossier, `universities/<id>/`. Le reste du code (frontend React, backend Express) est générique.
 
-Deux exemples sont fournis :
+Trois exemples sont fournis :
 
 - **`universities/univ-rennes/`** — l'implémentation de référence, complète (CAS + ADE + Planning GWT + Moodle + établissements + icônes de services).
 - **`universities/example-minimal/`** — le strict minimum (ENT uPortal + CAS). Bon point de départ : copiez-le, renommez-le, remplissez vos valeurs.
+- **`universities/univ-exemple/`** — université fictive de démonstration : origins factices, mais compte démo (`demo@l-ent.app` / `lent-demo`) et widgets activés. Sert à tester le flux d'ajout et le routage par sous-domaine de bout en bout.
 
 ## Démarrage rapide
 
@@ -44,6 +45,7 @@ export const hostnames = ['rennes.lent.example', 'ent-rennes.example.fr']
 - `origins.cas` (serveur + client) — origine du SSO CAS. Le flux de connexion implémenté est **CAS 2.0 avec formulaire** (scraping des champs `execution`/`_eventId`), le standard Jasig/Apereo utilisé par la plupart des universités françaises.
 - `auth.portalEntryPath` — page d'atterrissage uPortal (souvent `/f/services/normal/render.uP`). Sert de point d'entrée de connexion, de `Referer` par défaut et de preuve d'authentification.
 - `branding` — `appName`, `defaultTitle`, `seoTitle`, `seoDescription`, `logo` (+ `logoAlt`, `loginFooterLine`, `about.*`). Utilisé par la page de connexion, la sidebar, le SEO, le manifest PWA et `index.html` (placeholders `%LENT_*%`).
+  - `lockup` / `lockupDark` (optionnels, `client.js` uniquement) — visuel combiné « l'ent × université » affiché dans la sidebar et le header (comme Rennes). Sans eux, le logo l'ent et votre `logo` sont composés côte à côte automatiquement.
 - `features` — l'interrupteur général (voir ci-dessous).
 
 ### Features (dégradation gracieuse)

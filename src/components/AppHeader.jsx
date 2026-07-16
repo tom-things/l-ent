@@ -1,7 +1,6 @@
-import lentLogo from '../assets/lentlogo.svg'
-import lentLogoDark from '../assets/lentlogo-dark.svg'
 import { Icon } from '@iconify/react'
 import LentButton from './LentButton'
+import UniversityLockup from './UniversityLockup'
 
 function AppHeader({ authenticated, checking, onPrimaryAction, onAccountAction }) {
   const actionLabel = checking
@@ -14,8 +13,7 @@ function AppHeader({ authenticated, checking, onPrimaryAction, onAccountAction }
     <header className="w-full pt-10 px-10 max-xl:pt-6 max-md:pt-5 max-md:px-4">
       <div className="w-full flex items-center justify-between gap-6 max-xl:gap-[0.9rem] max-md:items-start max-md:gap-3">
         <a className="inline-flex items-center no-underline min-w-0 max-md:self-start" href="/" aria-label="Retour à l'accueil">
-          <img className="block w-[290px] h-16 object-contain max-xl:w-[180px] max-xl:h-12 max-md:w-[200px] max-md:h-auto dark:hidden" src={lentLogo} alt="L'ent" width="128" height="64" aria-hidden="true" />
-          <img className="hidden w-[290px] h-16 object-contain max-xl:w-[180px] max-xl:h-12 max-md:w-[200px] max-md:h-auto dark:block" src={lentLogoDark} alt="L'ent" width="128" height="64" />
+          <UniversityLockup variant="header" />
         </a>
 
         <div className="flex items-center gap-2 justify-end max-md:ml-auto max-md:items-start max-md:gap-[0.4rem]">
