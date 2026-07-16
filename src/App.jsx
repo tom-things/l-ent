@@ -17,9 +17,12 @@ import { syncRuntimeSeo } from './seo'
 import {
   ESTABLISHMENT_KEY,
   STUDENT_TP_KEY,
+  ADE_LOOKAHEAD_DAY_OPTIONS,
   clearStoredTpSelection,
+  getStoredAdeLookaheadDays,
   getStoredEstablishment,
   getStoredTpSelection,
+  persistAdeLookaheadDays,
   persistEstablishment,
   persistTpSelection,
 } from './profileStorage'
@@ -434,8 +437,6 @@ async function loadTpOptionsForAccountModal(tdOption) {
 
 function createEmptyAccountModalPlanningState(overrides = {}) {
   return {
-    booting: false,
-    bootingMessage: '',
     loading: false,
     applying: false,
     loadingMessage: '',
@@ -945,6 +946,11 @@ function App() {
   const [adeSearchQuery, setAdeSearchQuery] = useState('')
   const [establishment, setEstablishment] = useState(() => getStoredEstablishment())
   const [selectedTp, setSelectedTp] = useState(() => getStoredTpSelection())
+  const [nextClassLookaheadDays, setNextClassLookaheadDays] = useState(() => getStoredAdeLookaheadDays())
+  // Lookahead actually fed to the next-class widget. Re-synced only while the
+  // account modal is closed, so moving the slider doesn't refetch the widget
+  // on every step.
+  const [appliedLookaheadDays, setAppliedLookaheadDays] = useState(nextClassLookaheadDays)
   const [profileUser, setProfileUser] = useState(null)
   const [isHydratingProfile, setIsHydratingProfile] = useState(false)
   const [hasHydratedProfile, setHasHydratedProfile] = useState(false)
@@ -959,6 +965,10 @@ function App() {
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false)
   const [accountModalPhoto, setAccountModalPhoto] = useState(null)
   const [accountModalPlanningState, setAccountModalPlanningState] = useState(createEmptyAccountModalPlanningState)
+  // 'idle' | 'loading' | 'done' — once the ADE tree has loaded (or failed),
+  // reopening the account modal reuses the in-memory state instead of
+  // reloading everything.
+  const accountModalAdeLoadRef = useRef('idle')
   const [dashboardRevealNonce, setDashboardRevealNonce] = useState(0)
   const [isSidebarViewport, setIsSidebarViewport] = useState(() => (
     typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
@@ -1236,6 +1246,7 @@ function App() {
     setProfileUser(sessionState.user)
     setEstablishment(getStoredEstablishment(sessionState.user))
     setSelectedTp(getStoredTpSelection(sessionState.user))
+    setNextClassLookaheadDays(getStoredAdeLookaheadDays(sessionState.user))
     setHasHydratedProfile(false)
     setTpOnboardingState(createEmptyTpOnboardingState())
 
@@ -1551,6 +1562,7 @@ function App() {
     setIsAccountModalOpen(false)
     setAccountModalPhoto(null)
     setAccountModalPlanningState(createEmptyAccountModalPlanningState())
+    accountModalAdeLoadRef.current = 'idle'
   }, [sessionState.authenticated])
 
   useEffect(() => {
@@ -1591,11 +1603,16 @@ function App() {
       return undefined
     }
 
+    // ADE already loaded (or failed) — keep the current planning state
+    // instead of reloading the whole thing on every open.
+    if (accountModalAdeLoadRef.current !== 'idle') {
+      return undefined
+    }
+
     let cancelled = false
+    accountModalAdeLoadRef.current = 'loading'
 
     setAccountModalPlanningState(createStoredPlanningDraftState(selectedTp, {
-      booting: false,
-      bootingMessage: '',
       loading: true,
       loadingMessage: 'Chargement ADE...',
     }))
@@ -1603,14 +1620,14 @@ function App() {
     void buildAccountModalPlanningState(selectedTp)
       .then((nextPlanningState) => {
         if (!cancelled) {
+          accountModalAdeLoadRef.current = 'done'
           setAccountModalPlanningState(nextPlanningState)
         }
       })
       .catch((error) => {
         if (!cancelled) {
+          accountModalAdeLoadRef.current = 'done'
           setAccountModalPlanningState(createStoredPlanningDraftState(selectedTp, {
-            booting: false,
-            bootingMessage: '',
             loading: false,
             loadingMessage: '',
             errorMessage: getFrenchTpLoadErrorMessage(error),
@@ -1620,6 +1637,9 @@ function App() {
 
     return () => {
       cancelled = true
+      if (accountModalAdeLoadRef.current === 'loading') {
+        accountModalAdeLoadRef.current = 'idle'
+      }
     }
   }, [isAccountModalOpen, selectedTp, sessionState.authenticated])
 
@@ -1631,9 +1651,59 @@ function App() {
     setIsAccountModalOpen(true)
   }, [sessionState.authenticated, sessionState.checking])
 
+  // Closing the modal (X, backdrop, Escape) applies the draft planning
+  // selection — there is no separate "Appliquer" step. No-ops when the
+  // selection is incomplete or unchanged.
   const handleCloseAccountModal = useCallback(() => {
     setIsAccountModalOpen(false)
-  }, [])
+
+    if (!sessionState.user) {
+      return
+    }
+
+    const nextSelection = buildStoredTpSelection(
+      accountModalPlanningState.program,
+      accountModalPlanningState.draftYear,
+      accountModalPlanningState.draftTd,
+      accountModalPlanningState.draftTp,
+      accountModalPlanningState.contextLabel,
+    )
+
+    if (!nextSelection) {
+      return
+    }
+
+    const isSameSelection = Boolean(selectedTp)
+      && selectedTp.resourceId === nextSelection.resourceId
+      && (selectedTp.yearResourceId ?? null) === (nextSelection.yearResourceId ?? null)
+      && (selectedTp.tdResourceId ?? null) === (nextSelection.tdResourceId ?? null)
+      && (selectedTp.tpResourceId ?? null) === (nextSelection.tpResourceId ?? null)
+
+    if (isSameSelection) {
+      return
+    }
+
+    persistTpSelection(nextSelection, sessionState.user)
+    clearAdeTimetableCache()
+    setSelectedTp(nextSelection)
+    setTpOnboardingState(createEmptyTpOnboardingState({
+      contextLabel: accountModalPlanningState.contextLabel,
+      program: accountModalPlanningState.program,
+      selectedYear: accountModalPlanningState.draftYear,
+      selectedTd: accountModalPlanningState.draftTd,
+    }))
+  }, [accountModalPlanningState, selectedTp, sessionState.user])
+
+  const handleNextClassLookaheadChange = useCallback((days) => {
+    persistAdeLookaheadDays(days, sessionState.user)
+    setNextClassLookaheadDays(days)
+  }, [sessionState.user])
+
+  useEffect(() => {
+    if (!isAccountModalOpen) {
+      setAppliedLookaheadDays(nextClassLookaheadDays)
+    }
+  }, [isAccountModalOpen, nextClassLookaheadDays])
 
   const handleAccountModalYearChange = useCallback(async (yearResourceId) => {
     const nextYear = findTpOptionByResourceId(accountModalPlanningState.yearOptions, yearResourceId)
@@ -1736,35 +1806,6 @@ function App() {
       errorMessage: '',
     }))
   }, [accountModalPlanningState.tpOptions])
-
-  const handleAccountModalApply = useCallback(() => {
-    if (!sessionState.user) {
-      return
-    }
-
-    const nextSelection = buildStoredTpSelection(
-      accountModalPlanningState.program,
-      accountModalPlanningState.draftYear,
-      accountModalPlanningState.draftTd,
-      accountModalPlanningState.draftTp,
-      accountModalPlanningState.contextLabel,
-    )
-
-    if (!nextSelection) {
-      return
-    }
-
-    persistTpSelection(nextSelection, sessionState.user)
-    clearAdeTimetableCache()
-    setSelectedTp(nextSelection)
-    setTpOnboardingState(createEmptyTpOnboardingState({
-      contextLabel: accountModalPlanningState.contextLabel,
-      program: accountModalPlanningState.program,
-      selectedYear: accountModalPlanningState.draftYear,
-      selectedTd: accountModalPlanningState.draftTd,
-    }))
-    setIsAccountModalOpen(false)
-  }, [accountModalPlanningState, sessionState.user])
 
   const handleManageAccount = useCallback(() => {
     window.location.assign('https://sesame.univ-rennes.fr/comptes/')
@@ -2278,6 +2319,7 @@ function App() {
                 establishment={establishment}
                 sessionUser={sessionState.user}
                 selectedPlanningSelection={selectedTp}
+                nextClassLookaheadDays={appliedLookaheadDays}
                 debugNextClass={debugNextClass}
                 canUseServerLaunch={sessionState.canUseServerLaunch}
                 favoritesPortalTarget={isSidebarViewport ? favoritesSlotEl : null}
@@ -2301,7 +2343,6 @@ function App() {
       <AccountModal
         open={isAccountModalOpen}
         onClose={handleCloseAccountModal}
-        onApply={handleAccountModalApply}
         onManageAccount={sessionState.user === DEMO_CREDENTIALS.username ? null : handleManageAccount}
         onYearChange={handleAccountModalYearChange}
         onTdChange={handleAccountModalTdChange}
@@ -2309,6 +2350,9 @@ function App() {
         displayInfo={accountDisplayInfo}
         profilePhotoSrc={accountModalPhoto}
         planningState={accountModalPlanningState}
+        lookaheadDays={nextClassLookaheadDays}
+        lookaheadOptions={ADE_LOOKAHEAD_DAY_OPTIONS}
+        onLookaheadChange={handleNextClassLookaheadChange}
       />
       <PwaInstallPrompt forceShow={forceInstallPrompt || forceIosPrompt} forceIos={forceIosPrompt} />
       <PwaUpdateManager

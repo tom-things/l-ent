@@ -196,6 +196,7 @@ function WidgetContainer({
   establishment = null,
   sessionUser = null,
   selectedPlanningSelection = null,
+  nextClassLookaheadDays = undefined,
   debugNextClass = false,
   canUseServerLaunch = true,
   hideNextClass = false,
@@ -340,7 +341,7 @@ function WidgetContainer({
   return (
     <section className="w-full grid gap-8 pt-6 px-10 pb-10 max-md:px-4 max-md:pt-4 max-md:pb-8 max-md:gap-6" aria-label="Widgets">
       <div className="flex flex-wrap gap-5 items-stretch max-2xl:gap-[14px] max-md:gap-[10px] overflow-visible p-2 -m-2">
-        <article className={`widget-card shadow-md flex-[0_1_240px] min-h-[148px] p-5 border border-white rounded-[1.75rem] overflow-hidden bg-widget-bg text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-[min(240px,100%)] max-md:min-h-[132px] max-md:p-4 max-md:rounded-3xl max-xs:flex-[1_1_calc(50%-5px)] max-xs:min-w-0 flex flex-col justify-end gap-1 text-text ${areWidgetsVisible ? 'widget-card-visible delay-[80ms]' : ''}`}>
+        <article className={`widget-card shadow-md flex-[0_1_280px] min-h-[148px] p-5 border border-white rounded-[1.75rem] overflow-hidden bg-widget-bg text-base leading-6 min-w-0 max-2xl:flex-[1_1_calc(50%-7px)] max-2xl:min-w-[min(280px,100%)] max-md:min-h-[132px] max-md:p-4 max-md:rounded-3xl max-xs:flex-[1_1_calc(50%-5px)] max-xs:min-w-0 flex flex-col justify-end gap-1 text-text ${areWidgetsVisible ? 'widget-card-visible delay-[80ms]' : ''}`}>
           <Icon icon="ph:hand-waving" className="greeting-icon w-[34px] h-[34px] text-inherit shrink-0" aria-hidden="true" />
           <h2 className="m-0 min-w-0 leading-[1.15] text-2xl font-bold overflow-hidden text-ellipsis whitespace-nowrap max-md:text-[22px]" title={`Salut ${displayName} !`}>Salut {displayName} !</h2>
           <p className="m-0 leading-[1.2] text-[15px] font-medium line-clamp-2" title={greetingSubtitle}>{greetingSubtitle}</p>
@@ -353,6 +354,7 @@ function WidgetContainer({
               debug={debugNextClass}
               selection={selectedPlanningSelection}
               sessionUser={sessionUser}
+              lookaheadDays={nextClassLookaheadDays}
             />
           </div>
         ) : null}

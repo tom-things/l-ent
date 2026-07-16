@@ -56,7 +56,7 @@ function getEventKey(event) {
   ].join('||')
 }
 
-function buildNextClassCacheEntryKey(sessionUser, resourceKey) {
+function buildNextClassCacheEntryKey(sessionUser, resourceKey, lookaheadDays = NEXT_CLASS_LOOKAHEAD_DAYS) {
   const normalizedUser = String(sessionUser ?? '').trim()
   const normalizedResourceKey = String(resourceKey ?? '').trim()
 
@@ -64,7 +64,7 @@ function buildNextClassCacheEntryKey(sessionUser, resourceKey) {
     return ''
   }
 
-  return `${normalizedUser}::${normalizedResourceKey}`
+  return `${normalizedUser}::${normalizedResourceKey}::${lookaheadDays}d`
 }
 
 function readCachedNextClass(cacheKey) {
@@ -335,7 +335,7 @@ function buildResourceIdsFromSelection(selection) {
   }).map((value) => String(value).trim())
 }
 
-function getStatusCopy(widgetState) {
+function getStatusCopy(widgetState, lookaheadDays = NEXT_CLASS_LOOKAHEAD_DAYS) {
   switch (widgetState.status) {
     case 'loading':
       return {
@@ -359,7 +359,7 @@ function getStatusCopy(widgetState) {
     case 'empty':
       return {
         title: 'Aucun cours à venir',
-        body: `Rien de prévu dans les ${NEXT_CLASS_LOOKAHEAD_DAYS} prochains jours.`,
+        body: `Rien de prévu dans les ${lookaheadDays} prochains jours.`,
         action: 'Ouvrir l\'emploi du temps',
       }
     case 'paused':
@@ -384,10 +384,15 @@ function getStatusCopy(widgetState) {
   }
 }
 
-async function loadUpcomingClasses({ selection, signal, startDate = getTodayDateString() }) {
+async function loadUpcomingClasses({
+  selection,
+  signal,
+  startDate = getTodayDateString(),
+  lookaheadDays = NEXT_CLASS_LOOKAHEAD_DAYS,
+}) {
   const data = await getAdeUpcoming({
     date: startDate,
-    lookaheadDays: NEXT_CLASS_LOOKAHEAD_DAYS,
+    lookaheadDays,
     selection,
     signal,
   })
@@ -413,12 +418,13 @@ function WidgetNextClass({
   selection = null,
   sessionUser = null,
   autoLoad = true,
+  lookaheadDays = NEXT_CLASS_LOOKAHEAD_DAYS,
 }) {
   const resourceIds = useMemo(() => buildResourceIdsFromSelection(selection), [selection])
   const resourceKey = resourceIds.join('|')
   const cacheKey = useMemo(
-    () => buildNextClassCacheEntryKey(sessionUser, resourceKey),
-    [resourceKey, sessionUser],
+    () => buildNextClassCacheEntryKey(sessionUser, resourceKey, lookaheadDays),
+    [resourceKey, sessionUser, lookaheadDays],
   )
   const hasResources = resourceIds.length > 0
   const [widgetState, setWidgetState] = useState(() => (
@@ -546,6 +552,7 @@ function WidgetNextClass({
       const result = await loadUpcomingClasses({
         selection,
         signal: controller.signal,
+        lookaheadDays,
       })
 
       if (controller.signal.aborted) {
@@ -596,7 +603,7 @@ function WidgetNextClass({
 
       loadingRef.current = false
     }
-  }, [cacheKey, debug, hasResources, selection])
+  }, [cacheKey, debug, hasResources, selection, lookaheadDays])
 
   useEffect(() => {
     abortControllerRef.current?.abort()
@@ -775,7 +782,7 @@ function WidgetNextClass({
   const classGradientDark = `linear-gradient(180deg, hsla(${hue}, 40%, 18%, 0.4) 0%, transparent 55%)`
   const exactDateLabel = formatExactDateLabel(nextClass?.start)
   const shouldShowExactDateTooltip = Boolean(exactDateLabel && timeLabel && timeLabel !== 'En cours')
-  const statusCopy = getStatusCopy(widgetState)
+  const statusCopy = getStatusCopy(widgetState, lookaheadDays)
   const isStatusWide = ['unconfigured', 'limited', 'empty', 'paused', 'error'].includes(widgetState.status)
   const openAdePlanning = useCallback(() => {
     window.open(ADE_HREF, '_blank', 'noopener,noreferrer')

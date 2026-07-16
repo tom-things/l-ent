@@ -1,6 +1,11 @@
 export const ESTABLISHMENT_KEY = 'l-ent:establishment'
 export const STUDENT_TP_KEY = 'l-ent:student-tp'
+export const ADE_LOOKAHEAD_KEY = 'l-ent:ade-lookahead-days'
 const STUDENT_TP_SELECTION_VERSION = 2
+
+// Discrete steps offered by the "next class" lookahead slider (in days).
+export const ADE_LOOKAHEAD_DAY_OPTIONS = [7, 14, 21, 30, 60]
+export const DEFAULT_ADE_LOOKAHEAD_DAYS = 21
 
 function readStoredValue(key) {
   try {
@@ -121,6 +126,44 @@ export function persistTpSelection(selection, userId = null) {
 export function clearStoredTpSelection() {
   try {
     localStorage.removeItem(STUDENT_TP_KEY)
+  } catch {
+    // Storage unavailable
+  }
+}
+
+function normalizeAdeLookaheadDays(value) {
+  const numeric = Number(value)
+
+  if (!Number.isFinite(numeric)) {
+    return DEFAULT_ADE_LOOKAHEAD_DAYS
+  }
+
+  if (ADE_LOOKAHEAD_DAY_OPTIONS.includes(numeric)) {
+    return numeric
+  }
+
+  // Snap unknown/legacy values to the closest available step.
+  return ADE_LOOKAHEAD_DAY_OPTIONS.reduce((closest, option) => (
+    Math.abs(option - numeric) < Math.abs(closest - numeric) ? option : closest
+  ), ADE_LOOKAHEAD_DAY_OPTIONS[0])
+}
+
+export function getStoredAdeLookaheadDays(userId = null) {
+  const storedValue = readScopedStorageValue(ADE_LOOKAHEAD_KEY, userId)
+
+  if (storedValue == null || storedValue === '') {
+    return DEFAULT_ADE_LOOKAHEAD_DAYS
+  }
+
+  return normalizeAdeLookaheadDays(storedValue)
+}
+
+export function persistAdeLookaheadDays(days, userId = null) {
+  try {
+    localStorage.setItem(ADE_LOOKAHEAD_KEY, JSON.stringify({
+      user: userId || null,
+      value: normalizeAdeLookaheadDays(days),
+    }))
   } catch {
     // Storage unavailable
   }

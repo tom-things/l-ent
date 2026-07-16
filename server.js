@@ -2328,9 +2328,11 @@ app.post('/__ent_auth/ade/upcoming', async (req, res) => {
     const requestedDate = typeof req.body?.date === 'string' && req.body.date.trim()
       ? req.body.date.trim()
       : new Date().toISOString().slice(0, 10)
+    // Upper bound matches the largest step offered by the account-modal
+    // lookahead slider (ADE_LOOKAHEAD_DAY_OPTIONS in src/profileStorage.js).
     const lookaheadDays = Math.max(
       1,
-      Math.min(21, Number.parseInt(String(req.body?.lookaheadDays ?? '21'), 10) || 21),
+      Math.min(60, Number.parseInt(String(req.body?.lookaheadDays ?? '21'), 10) || 21),
     )
     const selection = req.body?.selection && typeof req.body.selection === 'object'
       ? req.body.selection
