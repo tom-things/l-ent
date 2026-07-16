@@ -174,7 +174,7 @@ function Sidebar({
               )}
             </span>
             <span className="flex flex-col min-w-0 gap-0">
-              <span className="block text-base leading-[1.15] text-text font-display tracking-[-0.01em] truncate">
+              <span className="block text-base leading-[1.15] text-text font-body tracking-[-0.01em] truncate">
                 {userName || 'Mon compte'}
               </span>
               {userSubtitle ? (

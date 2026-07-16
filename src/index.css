@@ -9,6 +9,10 @@
   --color-widget-bg: var(--color-widget-bg);
 
   --color-text: var(--color-text);
+  --color-text-30: var(--color-text-30);
+  --color-text-50: var(--color-text-50);
+  --color-text-60: var(--color-text-60);
+  --color-text-70: var(--color-text-70);
   --color-text-secondary: var(--color-text-secondary);
   --color-text-muted: var(--color-text-muted);
 
@@ -31,7 +35,7 @@
   --color-context-bg: var(--color-context-bg);
   --color-context-hover: var(--color-context-hover);
 
-  --font-display: 'ABC Camera Plain', system-ui, sans-serif;
+  --font-display: 'Libre Baskerville', Georgia, serif;
   --font-body: 'Inter Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
   --breakpoint-xs: 520px;
@@ -54,10 +58,10 @@
 }
 
 @font-face {
-  font-family: 'ABC Camera Plain';
-  src: url('./assets/fonts/ABCCameraPlainVariable.woff2') format('woff2');
+  font-family: 'Libre Baskerville';
+  src: url('./assets/fonts/LibreBaskerville-Variable.woff2') format('woff2');
   font-style: normal;
-  font-weight: 100 900;
+  font-weight: 400 700;
   font-display: swap;
 }
 
@@ -75,9 +79,9 @@ img {
 }
 
 :root {
-  --font-display: 'ABC Camera Plain', system-ui, sans-serif;
+  --font-display: 'Libre Baskerville', Georgia, serif;
   --font-body: 'Inter Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   line-height: 1.5;
   font-weight: 400;
   font-synthesis: none;
@@ -92,16 +96,20 @@ img {
   --color-bg-input: #f3f1eb;
   --color-widget-bg: #ffffff;
 
-  --color-text: #111827;
-  --color-text-secondary: #6b7280;
-  --color-text-muted: rgba(27, 27, 27, 0.6);
+  --color-text: #341200;
+  --color-text-30: rgb(52 18 0 / 0.3);
+  --color-text-50: rgb(52 18 0 / 0.5);
+  --color-text-60: rgb(52 18 0 / 0.6);
+  --color-text-70: rgb(52 18 0 / 0.7);
+  --color-text-secondary: var(--color-text-70);
+  --color-text-muted: var(--color-text-50);
 
-  --color-brand: #111827;
-  --color-brand-hover: #1f2937;
-  --color-brand-subtle: rgba(17, 24, 39, 0.08);
+  --color-brand: #341200;
+  --color-brand-hover: #4a1a00;
+  --color-brand-subtle: rgb(52 18 0 / 0.08);
 
-  --color-border: rgba(17, 24, 39, 0.1);
-  --color-border-input: rgba(27, 27, 27, 0.16);
+  --color-border: rgb(52 18 0 / 0.1);
+  --color-border-input: rgb(52 18 0 / 0.16);
 
   --color-error: #b91c1c;
   --color-error-bg: #fee2e2;
@@ -109,8 +117,8 @@ img {
   --color-success-text: #166534;
   --color-favorite: #eab308;
 
-  --color-shadow: rgba(17, 24, 39, 0.1);
-  --color-backdrop: rgba(27, 27, 27, 0.18);
+  --color-shadow: rgb(52 18 0 / 0.1);
+  --color-backdrop: rgb(52 18 0 / 0.18);
 
   --color-context-bg: rgba(255, 255, 255, 0.98);
   --color-context-hover: #f4f6f4;
@@ -130,6 +138,10 @@ img {
     --color-widget-bg: #1c1c1c;
 
     --color-text: #e4e4e4;
+    --color-text-30: rgb(228 228 228 / 0.3);
+    --color-text-50: rgb(228 228 228 / 0.5);
+    --color-text-60: rgb(228 228 228 / 0.6);
+    --color-text-70: rgb(228 228 228 / 0.7);
     --color-text-secondary: #9ca3af;
     --color-text-muted: rgba(255, 255, 255, 0.5);
 
@@ -165,22 +177,26 @@ body,
 body {
   margin: 0;
   min-width: 320px;
+  font-family: var(--font-body);
   background: var(--color-bg);
 }
 
-p,
-li,
-td,
-th,
-label,
-input,
-textarea,
-select {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-display);
+  font-weight: 600 !important;
+  letter-spacing: -0.04em !important;
+}
+
+textarea,select {
   font-family: var(--font-body);
 }
 
-button,
-input {
+button,input {
   font: inherit;
 }
 

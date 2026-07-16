@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { defineConfig } from 'vite'
 import { createEntAuthApp } from './server/entAuthApp.js'
-import { clientConfigPath, loadServerConfig, loadSharedConfig, resolveUniversityId } from './universities/index.js'
+import { clientConfigPath, listUniversityIds, loadServerConfig, loadSharedConfig, resolveUniversityId } from './universities/index.js'
 
 const universityId = resolveUniversityId()
 const universityServerConfig = await loadServerConfig(universityId)
@@ -15,6 +15,28 @@ const { branding } = await loadSharedConfig(universityId)
 const entDevAuthPlugin = {
   name: 'ent-dev-auth',
   configureServer(server) {
+    // Dev-only tenant switcher: the bundle is baked per university, so
+    // /univexemple (or /univ-exemple) restarts the dev server on that
+    // university and lands on its login page — the dev counterpart of the
+    // production per-subdomain routing (server.js).
+    server.middlewares.use((req, res, next) => {
+      const label = String(req.url ?? '').split('?')[0].replace(/^\/+|\/+$/g, '')
+      const targetId = listUniversityIds().find((id) => id === label || id.replace(/-/g, '') === label)
+
+      if (!targetId) return next()
+
+      if (targetId === universityId) {
+        res.writeHead(302, { Location: '/' })
+        res.end()
+        return
+      }
+
+      process.env.UNIVERSITY = targetId
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+      res.end(`<!doctype html><meta http-equiv="refresh" content="1;url=/"><p>Bascule vers ${targetId}…</p>`)
+      server.restart()
+    })
+
     server.middlewares.use(createEntAuthApp(universityServerConfig))
   },
   configurePreviewServer(server) {

@@ -21,13 +21,13 @@ const STEP_CONFIG = {
 const STEP_ORDER = ['year', 'td', 'tp']
 
 const TD_STEP_PALETTE = [
-  { background: '#d0fff8', text: '#132531', ring: 'rgba(19, 37, 49, 0.18)' },
-  { background: '#e6ffd0', text: '#182717', ring: 'rgba(24, 39, 23, 0.18)' },
-  { background: '#fbffd0', text: '#223018', ring: 'rgba(34, 48, 24, 0.18)' },
-  { background: '#ffd0f6', text: '#341829', ring: 'rgba(52, 24, 41, 0.18)' },
-  { background: '#ffd0d7', text: '#35221c', ring: 'rgba(53, 34, 28, 0.18)' },
-  { background: '#d0d5ff', text: '#231c3d', ring: 'rgba(35, 28, 61, 0.18)' },
-  { background: '#fffcd0', text: '#283218', ring: 'rgba(40, 50, 24, 0.18)' },
+  { background: '#d0fff8', text: '#341200', ring: 'rgba(19, 37, 49, 0.18)' },
+  { background: '#e6ffd0', text: '#341200', ring: 'rgba(24, 39, 23, 0.18)' },
+  { background: '#fbffd0', text: '#341200', ring: 'rgba(34, 48, 24, 0.18)' },
+  { background: '#ffd0f6', text: '#341200', ring: 'rgba(52, 24, 41, 0.18)' },
+  { background: '#ffd0d7', text: '#341200', ring: 'rgba(53, 34, 28, 0.18)' },
+  { background: '#d0d5ff', text: '#341200', ring: 'rgba(35, 28, 61, 0.18)' },
+  { background: '#fffcd0', text: '#341200', ring: 'rgba(40, 50, 24, 0.18)' },
 ]
 
 
@@ -153,8 +153,8 @@ function OnboardingPage({
   const specialStepCardStyle = isTpStep
     ? {
         '--td-card-bg': '#ffffff',
-        '--td-card-text': '#111827',
-        '--td-card-ring': 'rgba(17, 24, 39, 0.18)',
+        '--td-card-text': '#341200',
+        '--td-card-ring': 'rgb(52 18 0 / 0.18)',
       }
     : null
   const groupOptionButtons = stepOptions.map((stepOption, index) => {

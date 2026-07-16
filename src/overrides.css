@@ -792,7 +792,7 @@
 
 .sidebar-grade-tag {
   background: hsl(var(--tag-hue), 80%, 94%);
-  color: hsl(var(--tag-hue), 70%, 26%);
+  color: var(--color-text);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -827,7 +827,7 @@
 .average-grade-widget.grade-feature-disabled:hover,
 .sidebar-grade-pocket.grade-feature-disabled:hover {
   background: #f4f4f4;
-  color: #111111;
+  color: var(--color-text);
   border-color: rgba(17, 17, 17, 0.16);
   cursor: not-allowed;
   overflow: visible;
@@ -855,7 +855,7 @@
   border: 1px solid rgba(17, 17, 17, 0.14);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.94);
-  color: #111111;
+  color: var(--color-text);
   box-shadow: 0 10px 24px rgba(17, 17, 17, 0.12);
   font-size: 12px;
   font-weight: 700;

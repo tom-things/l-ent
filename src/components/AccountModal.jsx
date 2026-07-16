@@ -18,7 +18,7 @@ function buildSelectOptions(options, selectedOption) {
 function AccountModalLoadingDots({ label }) {
   return (
     <div
-      className="flex flex-col items-center justify-center gap-[10px] text-center text-[13px] font-medium leading-none text-[rgba(17,24,39,0.62)] dark:text-[rgba(255,255,255,0.5)]"
+      className="flex flex-col items-center justify-center gap-[10px] text-center text-[13px] font-medium leading-none text-text-60"
       role="status"
       aria-live="polite"
       aria-label={label}
@@ -304,7 +304,7 @@ function AccountModal({
           <div className="flex items-center justify-between px-[21px] pb-[10px] pt-[21px]">
             <h2
               id="account-modal-title"
-              className="m-0 font-body text-[26.4px] font-bold leading-[26.6px] tracking-[-0.28px] text-[var(--color-text)]"
+              className="m-0 text-[26.4px] font-bold leading-[26.6px] text-[var(--color-text)]"
             >
               Mon compte
               <span className="ml-[7px] text-[15px] font-medium tracking-normal text-text-secondary">et préférences</span>
@@ -365,7 +365,7 @@ function AccountModal({
             <div className="flex flex-col gap-[10px]">
               <div className="flex h-[17px] items-center gap-[5px]">
                 <Icon icon="carbon:calendar" className="h-[17px] w-[17px] shrink-0 text-[var(--color-text)]" aria-hidden="true" />
-                <p className="m-0 font-display text-[16px] font-medium leading-[16.96px] tracking-[-0.3125px] text-[var(--color-text)]">
+                <p className="m-0 font-body text-[16px] font-medium leading-[16.96px] tracking-[-0.3125px] text-[var(--color-text)]">
                   Planning
                 </p>
               </div>
@@ -381,7 +381,7 @@ function AccountModal({
                       <span className="font-body text-[14px] font-semibold leading-[14px] text-[var(--color-text)]">Année</span>
                       <div className="relative">
                         <select
-                          className="h-[46px] w-full appearance-none rounded-full border border-white bg-white pl-[13px] pr-10 font-display text-[16px] font-medium leading-[24px] tracking-[-0.3125px] text-[var(--color-text)] shadow-[0_1px_3px_rgba(0,0,0,0.06)] outline-none disabled:cursor-wait disabled:opacity-60 dark:border-[var(--color-border)] dark:bg-[var(--color-bg-surface)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)]"
+                          className="h-[46px] w-full appearance-none rounded-full border border-white bg-white pl-[13px] pr-10 font-body text-[16px] font-medium leading-[24px] tracking-[-0.3125px] text-[var(--color-text)] shadow-[0_1px_3px_rgba(0,0,0,0.06)] outline-none disabled:cursor-wait disabled:opacity-60 dark:border-[var(--color-border)] dark:bg-[var(--color-bg-surface)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)]"
                           value={planningState.draftYear?.resourceId ?? ''}
                           onChange={(event) => onYearChange(event.target.value)}
                           disabled={isPlanningBusy || yearOptions.length === 0}
@@ -401,7 +401,7 @@ function AccountModal({
                       <span className="font-body text-[14px] font-semibold leading-[14px] text-[var(--color-text)]">Classe TD</span>
                       <div className="relative">
                         <select
-                          className="h-[46px] w-full appearance-none rounded-full border border-white bg-white pl-[13px] pr-10 font-display text-[16px] font-medium leading-[24px] tracking-[-0.3125px] text-[var(--color-text)] shadow-[0_1px_3px_rgba(0,0,0,0.06)] outline-none disabled:cursor-wait disabled:opacity-60 dark:border-[var(--color-border)] dark:bg-[var(--color-bg-surface)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)]"
+                          className="h-[46px] w-full appearance-none rounded-full border border-white bg-white pl-[13px] pr-10 font-body text-[16px] font-medium leading-[24px] tracking-[-0.3125px] text-[var(--color-text)] shadow-[0_1px_3px_rgba(0,0,0,0.06)] outline-none disabled:cursor-wait disabled:opacity-60 dark:border-[var(--color-border)] dark:bg-[var(--color-bg-surface)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)]"
                           value={planningState.draftTd?.resourceId ?? ''}
                           onChange={(event) => onTdChange(event.target.value)}
                           disabled={isTdDisabled}
@@ -421,7 +421,7 @@ function AccountModal({
                       <span className="font-body text-[14px] font-semibold leading-[14px] text-[var(--color-text)]">Classe TP</span>
                       <div className="relative">
                         <select
-                          className="h-[46px] w-full appearance-none rounded-full border border-white bg-white pl-[13px] pr-10 font-display text-[16px] font-medium leading-[24px] tracking-[-0.3125px] text-[var(--color-text)] shadow-[0_1px_3px_rgba(0,0,0,0.06)] outline-none disabled:cursor-wait disabled:opacity-60 dark:border-[var(--color-border)] dark:bg-[var(--color-bg-surface)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)]"
+                          className="h-[46px] w-full appearance-none rounded-full border border-white bg-white pl-[13px] pr-10 font-body text-[16px] font-medium leading-[24px] tracking-[-0.3125px] text-[var(--color-text)] shadow-[0_1px_3px_rgba(0,0,0,0.06)] outline-none disabled:cursor-wait disabled:opacity-60 dark:border-[var(--color-border)] dark:bg-[var(--color-bg-surface)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)]"
                           value={planningState.draftTp?.resourceId ?? ''}
                           onChange={(event) => onTpChange(event.target.value)}
                           disabled={isTpDisabled}
@@ -449,7 +449,7 @@ function AccountModal({
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex h-[17px] items-center gap-[5px]">
                       <Icon icon="carbon:time" className="h-[17px] w-[17px] shrink-0 text-[var(--color-text)]" aria-hidden="true" />
-                      <p className="m-0 font-display text-[16px] font-medium leading-[16.96px] tracking-[-0.3125px] text-[var(--color-text)]">
+                      <p className="m-0 font-body text-[16px] font-medium leading-[16.96px] tracking-[-0.3125px] text-[var(--color-text)]">
                         Prochain cours
                       </p>
                     </div>
@@ -458,7 +458,7 @@ function AccountModal({
                     </span>
                   </div>
 
-                  <p className="m-0 font-body text-[14px] font-medium leading-[1.35] text-[rgba(17,24,39,0.62)] dark:text-[rgba(255,255,255,0.5)]">
+                  <p className="m-0 font-body text-[14px] font-medium leading-[1.35] text-text-60">
                     Jusqu’où chercher un cours à venir dans l’emploi du temps.
                   </p>
 
@@ -473,7 +473,7 @@ function AccountModal({
                     {lookaheadOptions.map((option, index) => (
                       <span
                         key={option}
-                        className="absolute top-0 -translate-x-1/2 font-body text-[12px] font-medium leading-none text-[rgba(17,24,39,0.5)] dark:text-[rgba(255,255,255,0.4)]"
+                        className="absolute top-0 -translate-x-1/2 font-body text-[12px] font-medium leading-none text-text-50"
                         style={{ left: `calc(${STEP_SLIDER_KNOB_PX / 2}px + (100% - ${STEP_SLIDER_KNOB_PX}px) * ${lookaheadStepCount > 1 ? index / (lookaheadStepCount - 1) : 0})` }}
                       >
                         {option}
@@ -495,7 +495,7 @@ function AccountModal({
             <div className="flex flex-col gap-[10px]">
               <div className="flex h-[17px] items-center gap-[5px]">
                 <Icon icon="carbon:information" className="h-[17px] w-[17px] shrink-0 text-[var(--color-text)]" aria-hidden="true" />
-                <p className="m-0 font-display text-[16px] font-medium leading-[16.96px] tracking-[-0.3125px] text-[var(--color-text)]">
+                <p className="m-0 font-body text-[16px] font-medium leading-[16.96px] tracking-[-0.3125px] text-[var(--color-text)]">
                   À propos
                 </p>
               </div>
@@ -508,7 +508,7 @@ function AccountModal({
             <div className="flex w-full items-end justify-end gap-[10px] p-[21px] max-sm:flex-col max-sm:items-stretch">
               <button
                 type="button"
-                className="inline-flex h-[46px] items-center justify-center rounded-full border border-white bg-white px-[13px] font-display text-[16px] font-normal leading-[24px] tracking-[-0.3125px] text-[var(--color-text)] shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition-colors duration-[120ms] ease-in-out hover:bg-[#f8f7f3] dark:border-[var(--color-border)] dark:bg-[var(--color-bg-surface)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] dark:hover:bg-[var(--color-bg-subtle)] max-sm:w-full"
+                className="inline-flex h-[46px] items-center justify-center rounded-full border border-white bg-white px-[13px] font-body text-[16px] font-normal leading-[24px] tracking-[-0.3125px] text-[var(--color-text)] shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition-colors duration-[120ms] ease-in-out hover:bg-[#f8f7f3] dark:border-[var(--color-border)] dark:bg-[var(--color-bg-surface)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] dark:hover:bg-[var(--color-bg-subtle)] max-sm:w-full"
                 onClick={onManageAccount}
               >
                 Gérer mon compte sur Sésame

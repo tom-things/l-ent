@@ -98,7 +98,7 @@ function AboutModal({
       >
         <div className="flex flex-col gap-[15px] p-[21px]">
           <div className="flex items-center justify-between">
-            <h2 id="about-modal-title" className="m-0 font-body text-[22px] font-bold leading-[1.1] tracking-[-0.28px]">
+            <h2 id="about-modal-title" className="m-0 text-[22px] font-bold leading-[1.1]">
               À propos
             </h2>
             <button
