@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { defineConfig } from 'vite'
+import { clientConfigPath, resolveUniversityId } from './universities/index.js'
 import {
   createAdeApiClient,
   getAdeSelectionLabels,
@@ -2606,9 +2607,17 @@ const gitHash = (() => {
   catch { return 'dev' }
 })()
 
+const universityId = resolveUniversityId()
+
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@university': clientConfigPath(universityId),
+    },
+  },
   define: {
     __BUILD_HASH__: JSON.stringify(gitHash),
+    __UNIVERSITY_ID__: JSON.stringify(universityId),
   },
   plugins: [
     tailwindcss(),

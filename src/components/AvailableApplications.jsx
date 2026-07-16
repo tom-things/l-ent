@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from '@iconify/react'
-import { getAppIcon } from '../assets/app_icons/uni_rennes'
+import { getAppIcon } from '../../universities/univ-rennes/app-icons'
 import {
   ENT_ORIGIN,
   buildEntProxyHref,

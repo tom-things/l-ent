@@ -28,7 +28,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['*.js'],
+    files: ['*.js', 'server/**/*.js', 'universities/index.js', 'universities/*/server.js'],
     languageOptions: {
       globals: {
         ...globals.browser,

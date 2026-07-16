@@ -3,7 +3,7 @@ import { Icon } from '@iconify/react'
 import lentLogoAlez from '../assets/login/lentlogo_alez.svg'
 import lentLogoAlezDark from '../assets/login/lentlogo_alez_dark.svg'
 import illustration from '../assets/login/illustration.webp'
-import universityRennesLogo from '../assets/uni_logos/univ-rennes.svg'
+import universityRennesLogo from '../../universities/univ-rennes/assets/logo.svg'
 import LentButton from './LentButton'
 import AboutModal from './AboutModal'
 
