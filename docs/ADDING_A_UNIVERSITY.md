@@ -19,6 +19,14 @@ UNIVERSITY=univ-exemple npm start        # production
 
 > **Important** : `UNIVERSITY` doit être identique au build et au run — le bundle frontend est généré pour une seule université. Sans variable, `univ-rennes` est utilisée. Copiez `.env.example` pour référence.
 
+### Hébergement multi-université (sous-domaines)
+
+Une même instance peut servir plusieurs universités (voir README, section « Multi-université par sous-domaine ») : `npm run build:all` puis `MULTI_TENANT=1 npm start`. Votre université est alors accessible sur le sous-domaine `<id-sans-tirets>.<domaine>` ; pour utiliser d'autres hostnames, exportez-les dans `shared.js` :
+
+```js
+export const hostnames = ['rennes.lent.example', 'ent-rennes.example.fr']
+```
+
 ## Les trois fichiers d'une université
 
 | Fichier | Chargé par | Contenu |

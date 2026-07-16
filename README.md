@@ -57,11 +57,13 @@ Le serveur Express écoute sur le port `3000` (configurable via `PORT`).
 ### Variables d'environnement
 
 
-| Variable         | Description                                            | Requis           |
-| ---------------- | ------------------------------------------------------ | ---------------- |
-| `PORT`           | Port du serveur (défaut : 3000)                        | Non              |
-| `SESSION_SECRET` | Clé de signature des sessions                          | Oui (production) |
-| `UNIVERSITY`     | Université active (défaut : `univ-rennes`)             | Non              |
+| Variable         | Description                                                        | Requis           |
+| ---------------- | ------------------------------------------------------------------ | ---------------- |
+| `PORT`           | Port du serveur (défaut : 3000)                                    | Non              |
+| `SESSION_SECRET` | Clé de signature des sessions                                      | Oui (production) |
+| `UNIVERSITY`     | Université active, ou tenant par défaut (défaut : `univ-rennes`)   | Non              |
+| `MULTI_TENANT`   | `1` : sert plusieurs universités, routées par sous-domaine         | Non              |
+| `TENANTS`        | Universités servies/buildées en multi-tenant (ids séparés par `,`) | Non              |
 
 ## Forker pour votre université
 
@@ -70,6 +72,19 @@ Tout ce qui est propre à l'Université de Rennes vit dans `universities/univ-re
 Pour ajouter votre université : copiez `universities/example-minimal/` (ou `univ-rennes/` pour un exemple complet), remplissez vos valeurs, puis lancez avec `UNIVERSITY=<votre-id>`. Chaque feature (ADE, planning, Moodle, notes…) est optionnelle et se désactive proprement.
 
 Guide détaillé : [docs/ADDING_A_UNIVERSITY.md](docs/ADDING_A_UNIVERSITY.md)
+
+### Multi-université par sous-domaine
+
+Une seule instance peut servir plusieurs universités, chacune sur son sous-domaine (`univrennes.lent.example`, `univnantes.lent.example`…) :
+
+```bash
+npm run build:all                 # un bundle par université → dist/<id>/
+MULTI_TENANT=1 npm start          # routage par hostname
+```
+
+Une requête est associée à l'université dont le premier label du hostname égale son id sans tirets (`univ-rennes` → `univrennes.…`), ou dont le hostname figure dans l'export optionnel `hostnames` de son `shared.js`. Les hôtes inconnus (dont le domaine racine) retombent sur `UNIVERSITY`. Les cookies de session étant limités à l'hôte, chaque sous-domaine est isolé.
+
+Sur Render (plan gratuit) : build command `npm install && npm run build:all`, start command `MULTI_TENANT=1 node server.js`, puis ajoutez chaque sous-domaine comme *custom domain* du service (un CNAME + une entrée Render par université — un certificat TLS classique est émis par hostname, pas besoin de wildcard).
 
 ## Sécurité & confidentialité
 

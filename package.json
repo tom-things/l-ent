@@ -8,6 +8,7 @@
     "dev": "vite",
     "start": "node server.js",
     "build": "vite build",
+    "build:all": "node scripts/build-all.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },
