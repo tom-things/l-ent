@@ -18,6 +18,7 @@ import {
   getAdeSelectionResourceIds,
 } from '../adeApi.js'
 import { createAdeUpcomingResolver } from '../adeUpcomingResolver.js'
+import { createPlanningPortalApiClient } from '../planningPortalApi.js'
 import { createPlanningRpcClient } from '../planningRpc.js'
 import {
   DEMO_ACCOUNT,
@@ -55,11 +56,13 @@ const CAS_ORIGIN = universityConfig.origins.cas
 const ADE_ORIGIN = universityConfig.origins.ade ?? null
 const MOODLE_ORIGIN = universityConfig.origins.moodle ?? null
 const PLANNING_ORIGIN = universityConfig.origins.planning ?? null
+const GRADES_ORIGIN = universityConfig.grades?.origin ?? null
 
 const ENT_HOST = new URL(ENT_ORIGIN).hostname
 const CAS_HOST = new URL(CAS_ORIGIN).hostname
 const MOODLE_HOST = MOODLE_ORIGIN ? new URL(MOODLE_ORIGIN).hostname : null
 const PLANNING_HOST = PLANNING_ORIGIN ? new URL(PLANNING_ORIGIN).hostname : null
+const USE_PLANNING_PORTAL_REST = universityConfig.planning?.api === 'portal-rest'
 
 const PORTAL_ENTRY_URL = `${ENT_ORIGIN}${universityConfig.auth.portalEntryPath}`
 const MOODLE_SHIBBOLETH_LOGIN_URL = MOODLE_ORIGIN
@@ -696,6 +699,55 @@ async function performEntLogin({ username, password }) {
   }
 }
 
+async function ensureGradesSession(jar) {
+  if (!GRADES_ORIGIN) {
+    throw new Error('Grade service is not configured for this university.')
+  }
+
+  const doAuthUrl = `${GRADES_ORIGIN}/services/doAuth.php?href=${encodeURIComponent(`${GRADES_ORIGIN}/`)}`
+  const result = await followRedirectChain(doAuthUrl, jar, {
+    headers: { Accept: 'text/html,application/xhtml+xml,*/*' },
+  })
+  await result.response.text()
+}
+
+function isGradesStudentPicture(picture) {
+  return picture.ok && /^image\//i.test(picture.contentType) && picture.size > 0
+}
+
+async function requestGradesStudentPicture(jar) {
+  const pictureResponse = await fetchWithJar(`${GRADES_ORIGIN}/services/data.php?q=getStudentPic`, jar, {
+    headers: {
+      Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      Referer: `${GRADES_ORIGIN}/`,
+    },
+    redirect: 'follow',
+  })
+  const contentType = pictureResponse.headers.get('content-type') ?? 'application/octet-stream'
+  const buffer = Buffer.from(await pictureResponse.arrayBuffer())
+
+  return {
+    ok: pictureResponse.ok,
+    status: pictureResponse.status,
+    contentType,
+    size: buffer.length,
+    buffer,
+  }
+}
+
+async function fetchGradesStudentPicture(jar) {
+  await ensureGradesSession(jar)
+  let picture = await requestGradesStudentPicture(jar)
+
+  if (isGradesStudentPicture(picture)) {
+    return picture
+  }
+
+  await ensureGradesSession(jar)
+  picture = await requestGradesStudentPicture(jar)
+  return picture
+}
+
 function buildEntProxyTargetUrl(requestUrl) {
   const rewrittenPath = (requestUrl || '/').replace(/^\/__ent_proxy/, '') || '/'
   return new URL(rewrittenPath, ENT_ORIGIN).toString()
@@ -1254,6 +1306,50 @@ function getPlanningCacheScope(session) {
   return `session:${session.id}`
 }
 
+function getPortalWeekRange(dateValue) {
+  const match = String(dateValue ?? '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const anchor = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+    : new Date()
+  const mondayOffset = (anchor.getDay() + 6) % 7
+  const start = new Date(anchor)
+  start.setDate(start.getDate() - mondayOffset)
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(start)
+  end.setDate(end.getDate() + 6)
+
+  const format = (date) => [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-')
+  const startLabel = format(start)
+  const endLabel = format(end)
+
+  return {
+    start: startLabel,
+    end: endLabel,
+    label: `Semaine du ${startLabel} au ${endLabel}`,
+    current: getPortalWeekRange.todayStart === startLabel,
+    dayLabels: Array.from({ length: 5 }, (_, index) => {
+      const day = new Date(start)
+      day.setDate(day.getDate() + index)
+      return format(day)
+    }),
+  }
+}
+
+{
+  const today = new Date()
+  const mondayOffset = (today.getDay() + 6) % 7
+  today.setDate(today.getDate() - mondayOffset)
+  getPortalWeekRange.todayStart = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, '0'),
+    String(today.getDate()).padStart(2, '0'),
+  ].join('-')
+}
+
 function clearSensitiveSessionCaches(session) {
   const sessionId = session?.id ?? null
   const cacheScope = getPlanningCacheScope(session)
@@ -1261,6 +1357,7 @@ function clearSensitiveSessionCaches(session) {
   clearCachedGrades(sessionId)
   clearAdeCaches(cacheScope)
   clearPlanningCaches(cacheScope)
+  clearPortalCaches(cacheScope)
 }
 
 function normalizeLoginIdentifier(username) {
@@ -1526,6 +1623,24 @@ const {
   gwtClientId: universityConfig.planning?.gwtClientId,
 })
 
+const portalClient = USE_PLANNING_PORTAL_REST
+  ? createPlanningPortalApiClient({
+      casOrigin: CAS_ORIGIN,
+      planningOrigin: PLANNING_ORIGIN,
+      fetchWithJar,
+      followRedirectChain,
+    })
+  : null
+
+const {
+  clearPortalCaches = () => {},
+  fetchPortalCalendar = null,
+  fetchPortalEvents = null,
+  fetchPortalStatus = null,
+  fetchPortalTree = null,
+  searchPortalTree = null,
+} = portalClient ?? {}
+
 const {
   authenticateToAde,
   clearAdeCaches,
@@ -1547,6 +1662,8 @@ const {
   fetchAdeUpcomingFromApi,
   fetchPlanningTreeFromRpc,
   fetchPlanningTimetableFromRpc,
+  campusSource: ADE_ORIGIN ? new URL(ADE_ORIGIN).hostname : 'campus-api',
+  planningSource: PLANNING_HOST ?? 'planning',
 })
 
 // ============================================================================
@@ -1826,6 +1943,34 @@ app.get('/__ent_auth/planning', async (req, res) => {
       })
     }
 
+    if (USE_PLANNING_PORTAL_REST) {
+      const week = getPortalWeekRange(targetDate)
+      const portalResult = await fetchPortalEvents(session.jar, {
+        date: week.start,
+        lookaheadDays: 7,
+        resourceIds: requestedResourceId ? [requestedResourceId] : [],
+        cacheScope: getPlanningCacheScope(session),
+      })
+
+      setSessionCookie(res, session)
+      return res.status(200).json({
+        authenticated: true,
+        sessionMode: session.mode ?? null,
+        events: portalResult.events,
+        weekLabel: week.label,
+        dayLabels: week.dayLabels,
+        resolvedWeek: week,
+        outOfRange: false,
+        debug: {
+          source: PLANNING_HOST,
+          api: 'portal-rest',
+          projectId: portalResult.projectId,
+          resourceIds: portalResult.resourceIds,
+          cache: portalResult.cache,
+        },
+      })
+    }
+
     const timetable = await fetchPlanningTimetableFromRpc(session.jar, targetDate, requestedResourceId, {
       cacheScope: getPlanningCacheScope(session),
     })
@@ -2043,7 +2188,7 @@ app.get('/__ent_auth/launch', async (req, res) => {
   }
 })
 
-// 6. Grades Endpoint (IUT Lannion, temporarily disabled)
+// 6. Grades Endpoint (ScoDoc / Notes9)
 app.get('/__ent_auth/grades', async (req, res) => {
   try {
     res.setHeader('Cache-Control', 'no-store')
@@ -2053,15 +2198,54 @@ app.get('/__ent_auth/grades', async (req, res) => {
       return res.status(200).json({ authenticated: false, grades: null })
     }
 
-    const gradesData = getCachedGrades(session.id) ?? buildDemoGradesPayload()
+    if (isDemoSession(session)) {
+      const gradesData = buildDemoGradesPayload()
+      setCachedGrades(session.id, gradesData)
+      setSessionCookie(res, session)
+      return res.status(200).json({
+        authenticated: true,
+        sessionMode: DEMO_SESSION_MODE,
+        grades: gradesData,
+      })
+    }
+
+    const cachedGrades = getCachedGrades(session.id)
+    if (cachedGrades) {
+      setSessionCookie(res, session)
+      return res.status(200).json({
+        authenticated: true,
+        sessionMode: session.mode ?? null,
+        grades: cachedGrades,
+      })
+    }
+
+    await ensureGradesSession(session.jar)
+    const dataUrl = `${GRADES_ORIGIN}/services/data.php?q=dataPremi%C3%A8reConnexion`
+    const dataResponse = await fetchWithJar(dataUrl, session.jar, {
+      headers: {
+        Accept: 'application/json, */*',
+        Referer: `${GRADES_ORIGIN}/`,
+      },
+      redirect: 'follow',
+    })
+    const dataText = await dataResponse.text()
+    let gradesData = null
+
+    try {
+      gradesData = JSON.parse(dataText)
+    } catch {
+      throw new Error(`ScoDoc returned an invalid response (${dataResponse.status}).`)
+    }
+
+    if (!dataResponse.ok || !gradesData || typeof gradesData !== 'object') {
+      throw new Error(`ScoDoc grades request failed (${dataResponse.status}).`)
+    }
 
     setCachedGrades(session.id, gradesData)
     setSessionCookie(res, session)
     res.status(200).json({
       authenticated: true,
-      sessionMode: isDemoSession(session) ? DEMO_SESSION_MODE : (session.mode ?? null),
-      disabled: true,
-      unavailableMessage: GRADES_UNAVAILABLE_MESSAGE,
+      sessionMode: session.mode ?? null,
       grades: gradesData,
     })
   } catch (error) {
@@ -2081,7 +2265,7 @@ app.get('/__ent_auth/student-pic', async (req, res) => {
         return res.status(200).json({
           authenticated: false,
           available: false,
-          source: 'profile-photo',
+          source: 'scodoc',
           previewUrl: null,
         })
       }
@@ -2091,25 +2275,52 @@ app.get('/__ent_auth/student-pic', async (req, res) => {
       })
     }
 
+    if (isDemoSession(session)) {
+      setSessionCookie(res, session)
+      if (wantsMeta) {
+        return res.status(200).json({
+          authenticated: true,
+          sessionMode: DEMO_SESSION_MODE,
+          available: false,
+          source: 'demo',
+          previewUrl: null,
+        })
+      }
+
+      return res.status(404).json({ available: false, source: 'demo' })
+    }
+
+    const picture = await fetchGradesStudentPicture(session.jar)
+    const isImage = isGradesStudentPicture(picture)
+
     setSessionCookie(res, session)
     res.setHeader('Cache-Control', 'no-store')
 
     if (wantsMeta) {
       return res.status(200).json({
         authenticated: true,
-        sessionMode: isDemoSession(session) ? DEMO_SESSION_MODE : (session.mode ?? null),
-        available: false,
-        source: isDemoSession(session) ? 'demo' : 'profile-photo',
-        previewUrl: null,
-        message: GRADES_UNAVAILABLE_MESSAGE,
+        sessionMode: session.mode ?? null,
+        available: picture.ok && isImage,
+        source: 'scodoc',
+        contentType: picture.contentType,
+        size: picture.size,
+        status: picture.status,
+        previewUrl: picture.ok && isImage ? '/__ent_auth/student-pic' : null,
       })
     }
 
-    return res.status(404).json({
-      available: false,
-      source: isDemoSession(session) ? 'demo' : 'profile-photo',
-      message: GRADES_UNAVAILABLE_MESSAGE,
-    })
+    if (!picture.ok || !isImage) {
+      return res.status(404).json({
+        available: false,
+        source: 'scodoc',
+        contentType: picture.contentType,
+        status: picture.status,
+      })
+    }
+
+    res.setHeader('Content-Type', picture.contentType)
+    res.setHeader('Content-Length', String(picture.size))
+    return res.status(200).end(picture.buffer)
   } catch (error) {
     if (req.query.meta === '1') {
       return res.status(500).json({
@@ -2130,6 +2341,20 @@ app.get('/__ent_auth/student-pic', async (req, res) => {
 // 7. ADE Status
 app.get('/__ent_auth/ade/status', async (req, res) => {
   try {
+    if (USE_PLANNING_PORTAL_REST) {
+      const entSession = getSessionFromRequest(req)
+      const result = await fetchPortalStatus(entSession?.jar ?? new CookieJar())
+      if (entSession) {
+        setSessionCookie(res, entSession)
+      }
+      return res.status(200).json({
+        ok: result.ok,
+        status: result.status,
+        data: result.data,
+        api: 'portal-rest',
+      })
+    }
+
     const result = await fetchAdeApi('/timetable/getAdeStatus', null)
     res.status(200).json({ ok: result.ok, status: result.status, data: result.data })
   } catch (error) {
@@ -2161,6 +2386,30 @@ app.get('/__ent_auth/ade/calendar', async (req, res) => {
         calendar,
         debug: {
           source: 'demo',
+        },
+      })
+    }
+
+    if (USE_PLANNING_PORTAL_REST) {
+      const portalResult = await fetchPortalCalendar(entSession.jar, {
+        cacheScope: getPlanningCacheScope(entSession),
+      })
+
+      setSessionCookie(res, entSession)
+      return res.status(200).json({
+        authenticated: true,
+        sessionMode: entSession.mode ?? null,
+        calendar: {
+          source: PLANNING_HOST,
+          resourceId: requestedResourceId || null,
+          targetDate,
+          data: portalResult.calendar,
+        },
+        debug: {
+          source: PLANNING_HOST,
+          api: 'portal-rest',
+          projectId: portalResult.projectId,
+          cache: portalResult.cache,
         },
       })
     }
@@ -2223,6 +2472,36 @@ app.get('/__ent_auth/ade/tree', async (req, res) => {
       })
     }
 
+    if (USE_PLANNING_PORTAL_REST) {
+      const tree = await fetchPortalTree(entSession.jar, {
+        requestedResourceId: requestedTreeId,
+        cacheScope: getPlanningCacheScope(entSession),
+      })
+
+      setSessionCookie(res, entSession)
+      return res.status(200).json({
+        authenticated: true,
+        sessionMode: entSession.mode ?? null,
+        tree: {
+          source: PLANNING_HOST,
+          root: tree.root,
+          currentResourceId: tree.currentResourceId,
+          focusResourceId: tree.focusResourceId,
+          currentPathIds: tree.currentPathIds,
+          selectionPathIds: tree.selectionPathIds,
+          selectionSchema: tree.selectionSchema,
+          defaultSelection: tree.defaultSelection,
+        },
+        debug: {
+          source: PLANNING_HOST,
+          api: 'portal-rest',
+          projectId: tree.projectId,
+          cache: tree.cache,
+          authCache: tree.authCache,
+        },
+      })
+    }
+
     const tree = await fetchPlanningTreeFromRpc(entSession.jar, requestedTreeId, {
       cacheScope: getPlanningCacheScope(entSession),
     })
@@ -2266,6 +2545,25 @@ app.get('/__ent_auth/ade/search', async (req, res) => {
         results: searchDemoAdeTree(query),
         debug: {
           source: 'demo',
+        },
+      })
+    }
+
+    if (USE_PLANNING_PORTAL_REST) {
+      const searchResult = await searchPortalTree(entSession.jar, query, {
+        cacheScope: getPlanningCacheScope(entSession),
+      })
+
+      setSessionCookie(res, entSession)
+      return res.status(200).json({
+        authenticated: true,
+        sessionMode: entSession.mode ?? null,
+        results: searchResult.results,
+        debug: {
+          source: PLANNING_HOST,
+          api: 'portal-rest',
+          projectId: searchResult.projectId,
+          cache: searchResult.cache,
         },
       })
     }
@@ -2314,6 +2612,39 @@ app.get('/__ent_auth/ade/timetable', async (req, res) => {
         timetable,
         debug: {
           source: 'demo',
+        },
+      })
+    }
+
+    if (USE_PLANNING_PORTAL_REST) {
+      const week = getPortalWeekRange(requestedDate)
+      const portalResult = await fetchPortalEvents(entSession.jar, {
+        date: week.start,
+        lookaheadDays: 7,
+        resourceIds: requestedResourceId ? [requestedResourceId] : [],
+        cacheScope: getPlanningCacheScope(entSession),
+      })
+
+      setSessionCookie(res, entSession)
+      return res.status(200).json({
+        authenticated: true,
+        sessionMode: entSession.mode ?? null,
+        timetable: {
+          source: PLANNING_HOST,
+          date: requestedDate,
+          resourceId: portalResult.resourceIds[0] ?? (requestedResourceId || null),
+          weekLabel: week.label,
+          resolvedWeek: week,
+          outOfRange: false,
+          dayLabels: week.dayLabels,
+          events: portalResult.events,
+        },
+        debug: {
+          source: PLANNING_HOST,
+          api: 'portal-rest',
+          projectId: portalResult.projectId,
+          resourceIds: portalResult.resourceIds,
+          cache: portalResult.cache,
         },
       })
     }
@@ -2398,6 +2729,42 @@ app.post('/__ent_auth/ade/upcoming', async (req, res) => {
 
     const resourceIds = getAdeSelectionResourceIds(selection)
     const selectionLabels = getAdeSelectionLabels(selection)
+
+    if (USE_PLANNING_PORTAL_REST) {
+      const portalResult = await fetchPortalEvents(entSession.jar, {
+        date: requestedDate,
+        lookaheadDays,
+        resourceIds,
+        cacheScope: getPlanningCacheScope(entSession),
+      })
+      const nextEvent = portalResult.events.find((event) => {
+        const endTime = Number.isFinite(event?.endMs) ? event.endMs : Date.parse(event?.end)
+        return Number.isFinite(endTime) && endTime > Date.now()
+      }) ?? null
+
+      setSessionCookie(res, entSession)
+      return res.status(200).json({
+        authenticated: true,
+        sessionMode: entSession.mode ?? null,
+        upcoming: {
+          source: PLANNING_HOST,
+          date: requestedDate,
+          lookaheadDays,
+          complete: portalResult.complete,
+          resourceIds: portalResult.resourceIds,
+          selectionLabels,
+          events: portalResult.events,
+          nextEvent,
+        },
+        debug: {
+          source: PLANNING_HOST,
+          api: 'portal-rest',
+          projectId: portalResult.projectId,
+          cache: portalResult.cache,
+        },
+      })
+    }
+
     const upcoming = await resolveAdeUpcoming(entSession.jar, entSession.credentials, {
       date: requestedDate,
       lookaheadDays,
@@ -2447,6 +2814,31 @@ app.get('/__ent_auth/ade/alerts', async (req, res) => {
         alerts: buildDemoAlertsPayload(),
         debug: {
           source: 'demo',
+        },
+      })
+    }
+
+    if (USE_PLANNING_PORTAL_REST) {
+      const portalResult = await fetchPortalCalendar(entSession.jar, {
+        cacheScope: getPlanningCacheScope(entSession),
+      })
+      const calendar = portalResult.calendar
+      const alerts = Array.isArray(calendar?.alerts)
+        ? calendar.alerts
+        : Array.isArray(calendar?.messages)
+          ? calendar.messages
+          : []
+
+      setSessionCookie(res, entSession)
+      return res.status(200).json({
+        authenticated: true,
+        sessionMode: entSession.mode ?? null,
+        alerts,
+        debug: {
+          source: PLANNING_HOST,
+          api: 'portal-rest',
+          projectId: portalResult.projectId,
+          cache: portalResult.cache,
         },
       })
     }

@@ -47,23 +47,25 @@ export const casOrigin = 'https://sso-cas.univ-rennes.fr'
 export const portalEntryPath = '/f/services/normal/render.uP'
 
 // Feature switchboard. A missing/false feature hides its widgets, nav items
-// and server endpoints. 'disabled' (grades) keeps the UI pill visible with
-// demo data while the backend endpoint is off.
+// and server endpoints.
 export const features = {
   ade: true,
   planning: true,
   moodle: true,
-  grades: 'disabled',
+  grades: true,
   weather: { enabled: true, defaultCity: 'Rennes' },
   demo: true,
 }
 
 // Public launch URL of the planning service (opened through /__ent_auth/launch).
-export const planningServiceUrl = 'https://planning.univ-rennes1.fr/direct/myplanning.jsp'
+export const planningServiceUrl = 'https://planning.univ-rennes.fr/portal/planning/calendar'
 
-// Copy shown (client and server side) while the grades feature is 'disabled'.
+export const gradesOrigin = 'https://notes9.iutlan.univ-rennes1.fr'
+export const gradesServiceUrl = `${gradesOrigin}/services/doAuth.php?href=${encodeURIComponent(`${gradesOrigin}/`)}`
+
+// Fallback copy shown when the upstream grade service is unavailable.
 export const gradesCopy = {
-  unavailableTitle: 'Notes temporairement indisponibles',
-  unavailableDetail: "Suite à une demande de l'IUT visant à fermer l'accès public à ScoDoc.",
+  unavailableTitle: 'Notes indisponibles',
+  unavailableDetail: 'ScoDoc ne répond pas pour le moment.',
   disabledPillLabel: 'Notes indisponibles',
 }

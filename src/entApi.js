@@ -16,6 +16,13 @@ const APP_BASE_URL = (() => {
 export const ENT_PROXY_PREFIX = `${APP_BASE_URL}/__ent_proxy`
 export const ENT_AUTH_PREFIX = `${APP_BASE_URL}/__ent_auth`
 export const DEFAULT_REFERER = `${ENT_ORIGIN}${universityConfig.auth?.portalEntryPath ?? '/'}`
+// Public entry point of the grade service (ScoDoc/Notes9), opened through the
+// server-side launch relay so the CAS session is reused. Null when the
+// university has no grade service configured.
+const GRADES_SERVICE_URL = universityConfig.grades?.serviceUrl ?? null
+export const GRADES_LAUNCH_HREF = GRADES_SERVICE_URL
+  ? `${ENT_AUTH_PREFIX}/launch?url=${encodeURIComponent(GRADES_SERVICE_URL)}`
+  : null
 const DEFAULT_ACCEPT = 'application/json, text/html;q=0.9, text/plain;q=0.8, */*;q=0.5'
 const DEMO_SESSION_MODE = 'demo'
 const RECENT_LOGIN_SESSION_KEY = 'l-ent:recent-login-at'
@@ -336,6 +343,14 @@ export async function getStudentProfilePictureMeta() {
 
 export function clearGradesCache() {
   localStorage.removeItem(GRADES_CACHE_KEY)
+}
+
+export function openGradesService() {
+  if (!GRADES_LAUNCH_HREF || typeof window === 'undefined') {
+    return
+  }
+
+  window.open(GRADES_LAUNCH_HREF, '_blank', 'noopener,noreferrer')
 }
 
 function parseGradeValue(val) {

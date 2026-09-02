@@ -242,6 +242,7 @@ function AccountModal({
   displayInfo,
   profilePhotoSrc,
   planningState,
+  planningFieldLabels = null,
   lookaheadDays,
   lookaheadOptions,
   onLookaheadChange,
@@ -281,6 +282,11 @@ function AccountModal({
   const shouldShowPlanningLoader = planningState.loading && !planningState.draftYear
 
   const loadingPlaceholder = isPlanningBusy ? 'Chargement...' : 'Choisir'
+  const fieldLabels = {
+    year: planningFieldLabels?.year || 'Année',
+    td: planningFieldLabels?.td || 'Classe TD',
+    tp: planningFieldLabels?.tp || 'Classe TP',
+  }
 
   const canConfigureLookahead = typeof onLookaheadChange === 'function'
     && Array.isArray(lookaheadOptions)
@@ -378,7 +384,7 @@ function AccountModal({
                 ) : (
                   <div className="grid w-full grid-cols-3 gap-[10px] max-sm:grid-cols-1">
                     <label className="flex min-w-0 flex-col gap-[5px]">
-                      <span className="font-body text-[14px] font-semibold leading-[14px] text-[var(--color-text)]">Année</span>
+                      <span className="font-body text-[14px] font-semibold leading-[14px] text-[var(--color-text)]">{fieldLabels.year}</span>
                       <div className="relative">
                         <select
                           className="h-[46px] w-full appearance-none rounded-full border border-white bg-white pl-[13px] pr-10 font-body text-[16px] font-medium leading-[24px] tracking-[-0.3125px] text-[var(--color-text)] shadow-[0_1px_3px_rgba(0,0,0,0.06)] outline-none disabled:cursor-wait disabled:opacity-60 dark:border-[var(--color-border)] dark:bg-[var(--color-bg-surface)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)]"
@@ -398,7 +404,7 @@ function AccountModal({
                     </label>
 
                     <label className="flex min-w-0 flex-col gap-[5px]">
-                      <span className="font-body text-[14px] font-semibold leading-[14px] text-[var(--color-text)]">Classe TD</span>
+                      <span className="font-body text-[14px] font-semibold leading-[14px] text-[var(--color-text)]">{fieldLabels.td}</span>
                       <div className="relative">
                         <select
                           className="h-[46px] w-full appearance-none rounded-full border border-white bg-white pl-[13px] pr-10 font-body text-[16px] font-medium leading-[24px] tracking-[-0.3125px] text-[var(--color-text)] shadow-[0_1px_3px_rgba(0,0,0,0.06)] outline-none disabled:cursor-wait disabled:opacity-60 dark:border-[var(--color-border)] dark:bg-[var(--color-bg-surface)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)]"
@@ -418,7 +424,7 @@ function AccountModal({
                     </label>
 
                     <label className="flex min-w-0 flex-col gap-[5px]">
-                      <span className="font-body text-[14px] font-semibold leading-[14px] text-[var(--color-text)]">Classe TP</span>
+                      <span className="font-body text-[14px] font-semibold leading-[14px] text-[var(--color-text)]">{fieldLabels.tp}</span>
                       <div className="relative">
                         <select
                           className="h-[46px] w-full appearance-none rounded-full border border-white bg-white pl-[13px] pr-10 font-body text-[16px] font-medium leading-[24px] tracking-[-0.3125px] text-[var(--color-text)] shadow-[0_1px_3px_rgba(0,0,0,0.06)] outline-none disabled:cursor-wait disabled:opacity-60 dark:border-[var(--color-border)] dark:bg-[var(--color-bg-surface)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)]"

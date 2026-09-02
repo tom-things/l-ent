@@ -1,7 +1,7 @@
 // Université de Rennes — server-side configuration.
 // Never imported by client code: holds origins, auth-flow parameters and the
 // reverse-engineered ADE mobile-app credentials.
-import { id, casOrigin, entOrigin, features, gradesCopy, planningServiceUrl, portalEntryPath } from './shared.js'
+import { id, casOrigin, entOrigin, features, gradesCopy, gradesOrigin, planningServiceUrl, portalEntryPath } from './shared.js'
 
 export default {
   id,
@@ -15,7 +15,7 @@ export default {
     // the matching feature flag must be false too.
     ade: 'https://campus-app.univ-rennes.fr',
     moodle: 'https://foad.univ-rennes.fr',
-    planning: 'https://planning.univ-rennes1.fr',
+    planning: 'https://planning.univ-rennes.fr',
   },
 
   auth: {
@@ -54,8 +54,12 @@ export default {
 
   planning: {
     serviceUrl: planningServiceUrl,
+    api: 'portal-rest',
     gwtClientId: 'Z0pqq18',
   },
 
-  grades: gradesCopy,
+  grades: {
+    ...gradesCopy,
+    origin: gradesOrigin,
+  },
 }

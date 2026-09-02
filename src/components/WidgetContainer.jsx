@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { Icon } from '@iconify/react'
 import universityConfig from '@university'
 import AvailableApplications from './AvailableApplications'
-import WidgetAverageGrade from './WidgetAverageGrade'
 import WidgetLatestGrade from './WidgetLatestGrade'
 import WidgetNextClass from './WidgetNextClass'
 import {
@@ -372,7 +371,8 @@ function WidgetContainer({
         ) : null}
         {!hideGradeWidgets && Boolean(universityConfig.features?.grades) && getEstablishmentConfig(establishment)?.gradeWidgets ? (
           <div id="sidebar-section-grades" className="flex-[1_1_100%] min-w-0 flex items-stretch gap-5 max-2xl:gap-[14px] max-md:gap-[10px] 2xl:contents">
-            <WidgetAverageGrade visible={areWidgetsVisible} />
+            {/* Bloc « Moyenne Générale » masqué pour l'instant — réimporter
+                WidgetAverageGrade et le rendre ici pour le réactiver. */}
             <WidgetLatestGrade visible={areWidgetsVisible} />
           </div>
         ) : null}

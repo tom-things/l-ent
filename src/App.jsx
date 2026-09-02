@@ -40,6 +40,7 @@ import {
   getAdeStatus,
   getAdeTimetable,
   getAdeTree,
+  getAdeUpcoming,
   getAuthSession,
   getAverageGrade,
   getGrades,
@@ -772,7 +773,11 @@ function normalizeAdePathLabels(nodes) {
 
 function getAdeTreePathNodes(treePayload) {
   const root = treePayload?.root
-  const currentPathIds = Array.isArray(treePayload?.currentPathIds) ? treePayload.currentPathIds : []
+  const currentPathIds = Array.isArray(treePayload?.selectionPathIds)
+    ? treePayload.selectionPathIds
+    : Array.isArray(treePayload?.currentPathIds)
+      ? treePayload.currentPathIds
+      : []
 
   return currentPathIds
     .map((nodeId) => findAdeTreeNodeById(root, nodeId))
@@ -1308,6 +1313,32 @@ function App() {
         let treeResponse = await getAdeTree()
         let treePayload = treeResponse?.tree
         const detectedEstablishment = detectEstablishmentFromAdeTree(treePayload)
+        const defaultSelection = treePayload?.defaultSelection?.resourceId
+          ? treePayload.defaultSelection
+          : null
+
+        if (defaultSelection) {
+          if (cancelled) {
+            return
+          }
+
+          persistEstablishment(detectedEstablishment, sessionState.user)
+          setEstablishment(detectedEstablishment)
+          persistTpSelection(defaultSelection, sessionState.user)
+          clearAdeTimetableCache()
+          setSelectedTp(defaultSelection)
+          setTpOnboardingState(createEmptyTpOnboardingState({
+            contextLabel: defaultSelection.contextLabel ?? '',
+            program: defaultSelection.programResourceId
+              ? {
+                  resourceId: defaultSelection.programResourceId,
+                  label: defaultSelection.programLabel ?? '',
+                }
+              : null,
+          }))
+          return
+        }
+
         let nextTpOnboardingState = buildInitialTpOnboardingState(treePayload)
 
         if (nextTpOnboardingState.program?.resourceId && nextTpOnboardingState.yearOptions.length === 0) {
@@ -2357,6 +2388,7 @@ function App() {
         displayInfo={accountDisplayInfo}
         profilePhotoSrc={accountModalPhoto}
         planningState={accountModalPlanningState}
+        planningFieldLabels={universityConfig.planning?.selectionLabels}
         lookaheadDays={nextClassLookaheadDays}
         lookaheadOptions={ADE_LOOKAHEAD_DAY_OPTIONS}
         onLookaheadChange={handleNextClassLookaheadChange}
@@ -2531,7 +2563,7 @@ function App() {
             <div className="mt-1">
               <p className="m-0 mb-2 text-xs font-bold tracking-[0.08em] uppercase text-text-muted font-body">ADE Schedule API</p>
               <div className="flex gap-3 flex-wrap max-lg:flex-col max-lg:items-stretch">
-                {['ADE Status', 'ADE Calendar', 'ADE Tree', 'ADE Timetable', 'ADE Alerts'].map((label) => (
+                {['ADE Status', 'ADE Calendar', 'ADE Tree', 'ADE Timetable', 'ADE Upcoming', 'ADE Alerts'].map((label) => (
                   <button
                     key={label}
                     type="button"
@@ -2542,6 +2574,11 @@ function App() {
                         'ADE Calendar': () => getAdeCalendarMetadata({ resourceId: selectedAdeResourceId }),
                         'ADE Tree': () => getAdeTree(),
                         'ADE Timetable': () => getAdeTimetable({ force: true, resourceId: selectedAdeResourceId }),
+                        'ADE Upcoming': () => getAdeUpcoming({
+                          date: new Date().toISOString().slice(0, 10),
+                          lookaheadDays: nextClassLookaheadDays,
+                          selection: selectedTp,
+                        }),
                         'ADE Alerts': () => getAdeAlerts(),
                       }
                       return actions[label]()

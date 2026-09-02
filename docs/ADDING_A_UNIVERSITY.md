@@ -85,7 +85,8 @@ Un feature à `false` : le serveur répond `{ disabled: true }` sur les endpoint
 - `services.getAppIcon(title)` — retourne l'icône d'une application ENT à partir de son titre (voir `universities/univ-rennes/app-icons/`). Retournez `null` pour l'icône générique.
 - `services.categories` — mots-clés → catégories de la grille d'applications.
 - `services.isUnavailableApplication(app)` — masque complètement certaines applications.
-- `grades` (copy) — `unavailableTitle`, `unavailableDetail`, `disabledPillLabel` quand `features.grades === 'disabled'`.
+- `grades.serviceUrl` (client) — URL publique du service de notes (ScoDoc), ouverte via `/__ent_auth/launch` depuis les widgets et le lien « Mes notes » quand `features.grades === true`.
+- `grades` (copy) — `unavailableTitle`, `unavailableDetail`, `disabledPillLabel` quand `features.grades === 'disabled'` ; `unavailableTitle`/`unavailableDetail` servent aussi de message d'erreur serveur quand ScoDoc ne répond pas.
 
 ### Serveur uniquement (`server.js`)
 
@@ -93,6 +94,7 @@ Un feature à `false` : le serveur répond `{ disabled: true }` sur les endpoint
 - `moodle.shibbolethLoginPath` + `moodle.wayfEntityId` — l'entityID Shibboleth de votre université sur la page WAYF de la fédération (visible dans l'URL `user_idp=` lors d'une connexion Moodle manuelle).
 - `ade.etab`, `ade.passwordKey`, `ade.passwordIv`, `ade.appHeaders` — identité de l'app mobile « Campus » de votre université. **Ces valeurs se rétro-ingénient par campus** (interception du trafic de l'app mobile officielle) ; voir `API_GUIDE.md` et `src/knownEndpoints.js` pour la méthodologie utilisée à Rennes.
 - `planning.gwtClientId` — identifiant client GWT du Planning adesoft (visible dans les requêtes RPC de `myplanning.jsp`).
+- `grades.origin` — origine du ScoDoc (ex. `https://notes9.iutlan.univ-rennes1.fr`). Le serveur y rejoue la session CAS (`/services/doAuth.php`) puis lit `data.php?q=dataPremièreConnexion` et la photo étudiante. Requis quand `features.grades === true`.
 
 ## Checklist de validation
 

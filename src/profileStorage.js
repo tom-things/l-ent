@@ -1,7 +1,7 @@
 export const ESTABLISHMENT_KEY = 'l-ent:establishment'
 export const STUDENT_TP_KEY = 'l-ent:student-tp'
 export const ADE_LOOKAHEAD_KEY = 'l-ent:ade-lookahead-days'
-const STUDENT_TP_SELECTION_VERSION = 2
+const STUDENT_TP_SELECTION_VERSION = 4
 
 // Discrete steps offered by the "next class" lookahead slider (in days).
 export const ADE_LOOKAHEAD_DAY_OPTIONS = [7, 14, 21, 30, 60]

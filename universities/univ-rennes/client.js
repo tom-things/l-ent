@@ -12,6 +12,7 @@ import {
   entOrigin,
   features,
   gradesCopy,
+  gradesServiceUrl,
   planningServiceUrl,
   portalEntryPath,
   university,
@@ -51,6 +52,16 @@ export default {
 
   planning: {
     serviceUrl: planningServiceUrl,
+    selectionLabels: {
+      year: 'Niveau',
+      td: 'Classe TD',
+      tp: 'Classe TP',
+    },
+  },
+
+  grades: {
+    ...gradesCopy,
+    serviceUrl: gradesServiceUrl,
   },
 
   // Optional: detection of the student's establishment (faculty/campus) from
@@ -76,6 +87,17 @@ export default {
         gradeWidgets: true,
         nextClassWidget: true,
         extraServices: [
+          // ScoDoc shortcut, opened through the CAS launch relay. Only listed
+          // while the grade service is live.
+          ...(features.grades === true
+            ? [{
+                id: 'lent-iutlan-notes9',
+                title: 'Notes IUT Lannion',
+                description: 'Consulter ses notes et résultats',
+                href: gradesServiceUrl,
+                target: '_blank',
+              }]
+            : []),
           {
             id: 'lent-iutlan-loxya',
             title: 'Loxya',
@@ -100,24 +122,5 @@ export default {
       { label: 'Compte', keywords: ['sésame', 'sesame', 'compte informatique', 'mfa', 'authentification', "crédits d'impression"] },
       { label: 'Outils', keywords: ['microsoft 365', 'esup signature', 'emplois du temps', 'assistance'] },
     ],
-    // Optional hook: hide an ENT application entirely (Rennes hides the
-    // ScoDoc "notes" portlet for IUT Lannion while grade access is closed).
-    isUnavailableApplication(application = {}) {
-      const haystack = [
-        application.id,
-        application.fname,
-        application.title,
-        application.name,
-        application.description,
-        application.href,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-
-      return haystack.includes('notes') && (haystack.includes('lannion') || haystack.includes('iutlan'))
-    },
   },
-
-  grades: gradesCopy,
 }

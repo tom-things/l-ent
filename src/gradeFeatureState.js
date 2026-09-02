@@ -1,6 +1,14 @@
 import universityConfig from '@university'
 
 const gradesCopy = universityConfig.grades ?? {}
+const gradesFeature = universityConfig.features?.grades ?? false
+
+// features.grades is a tri-state switch:
+//   true       → live ScoDoc data, widgets and "Mes notes" link are clickable
+//   'disabled' → widgets stay visible with demo data behind an "unavailable" pill
+//   false      → everything grade-related is hidden
+export const GRADES_FEATURE_ENABLED = gradesFeature === true
+export const GRADES_FEATURE_DISABLED = gradesFeature === 'disabled'
 
 export const GRADES_UNAVAILABLE_TITLE = gradesCopy.unavailableTitle ?? 'Notes indisponibles'
 export const GRADES_UNAVAILABLE_DETAIL = gradesCopy.unavailableDetail ?? ''

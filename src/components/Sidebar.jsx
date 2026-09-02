@@ -3,17 +3,48 @@ import { Icon } from '@iconify/react'
 import universityConfig from '@university'
 import UniversityLockup from './UniversityLockup'
 import UpdateNotice from './UpdateNotice'
-import { ENT_AUTH_PREFIX } from '../entApi'
-import { GRADES_UNAVAILABLE_DETAIL, GRADES_UNAVAILABLE_TITLE } from '../gradeFeatureState'
+import { ENT_AUTH_PREFIX, GRADES_LAUNCH_HREF } from '../entApi'
+import {
+  GRADES_FEATURE_DISABLED,
+  GRADES_FEATURE_ENABLED,
+  GRADES_UNAVAILABLE_DETAIL,
+  GRADES_UNAVAILABLE_TITLE,
+} from '../gradeFeatureState'
 
 const PLANNING_SERVICE_URL = universityConfig.planning?.serviceUrl ?? null
 const PLANNING_HREF = PLANNING_SERVICE_URL
   ? `${ENT_AUTH_PREFIX}/launch?url=${encodeURIComponent(PLANNING_SERVICE_URL)}`
   : null
 
+// "Mes notes" follows the tri-state grades feature: a link to the grade
+// service when live, a greyed-out item with the unavailability notice when
+// 'disabled', nothing otherwise.
+function buildGradesNavItem() {
+  const base = { id: 'grades', label: 'Mes notes', icon: 'carbon:chart-pie' }
+
+  if (GRADES_FEATURE_ENABLED) {
+    return GRADES_LAUNCH_HREF
+      ? { ...base, href: GRADES_LAUNCH_HREF, target: '_blank' }
+      : { ...base, targetId: 'sidebar-section-grades' }
+  }
+
+  if (GRADES_FEATURE_DISABLED) {
+    return {
+      ...base,
+      disabled: true,
+      disabledTitle: GRADES_UNAVAILABLE_TITLE,
+      disabledDetail: GRADES_UNAVAILABLE_DETAIL,
+    }
+  }
+
+  return null
+}
+
 function buildNavItems(establishment) {
-  const showGradesNav = Boolean(universityConfig.features?.grades)
-    && universityConfig.establishments?.byId?.[establishment]?.gradeWidgets
+  // Grades nav only for establishments whose config enables grade widgets.
+  const gradesNavItem = universityConfig.establishments?.byId?.[establishment]?.gradeWidgets
+    ? buildGradesNavItem()
+    : null
 
   return [
     {
@@ -22,18 +53,7 @@ function buildNavItems(establishment) {
       icon: 'carbon:app-switcher',
       targetId: 'sidebar-section-applications',
     },
-    // Grades nav (and their unavailability notice) only for establishments
-    // whose config enables grade widgets.
-    ...(showGradesNav
-      ? [{
-          id: 'grades',
-          label: 'Mes notes',
-          icon: 'carbon:chart-pie',
-          disabled: true,
-          disabledTitle: GRADES_UNAVAILABLE_TITLE,
-          disabledDetail: GRADES_UNAVAILABLE_DETAIL,
-        }]
-      : []),
+    ...(gradesNavItem ? [gradesNavItem] : []),
     ...(universityConfig.features?.planning && PLANNING_HREF
       ? [{
           id: 'planning',

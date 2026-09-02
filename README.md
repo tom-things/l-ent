@@ -148,7 +148,7 @@ l'ent communique avec les systèmes suivants :
 - **Portail ENT** : layout, portlets, marketplace
 - **ADE Campus** : emploi du temps (sessions chiffrées)
 - **Planning** : planning détaillé via GWT RPC
-- **Notes** : fonctionnalité temporairement désactivée
+- **Notes** : relevé ScoDoc (moyenne, dernière note, photo étudiante)
 - **Open-Meteo** : météo (API libre)
 
 ## Contribution

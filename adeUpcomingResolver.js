@@ -1,5 +1,5 @@
-const CAMPUS_UPCOMING_SOURCE = 'campus-app.univ-rennes.fr'
-const PLANNING_UPCOMING_SOURCE = 'planning.univ-rennes1.fr'
+const DEFAULT_CAMPUS_UPCOMING_SOURCE = 'campus-api'
+const DEFAULT_PLANNING_UPCOMING_SOURCE = 'planning'
 
 function toTimestamp(value) {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -194,6 +194,7 @@ async function fetchPlanningFallbackUpcoming(fetchPlanningTimetableFromRpc, jar,
   resourceIds = [],
   selectionLabels = [],
   cacheScope = null,
+  source = DEFAULT_PLANNING_UPCOMING_SOURCE,
 } = {}) {
   const normalizedResourceIds = resourceIds
     .map((value) => String(value ?? '').trim())
@@ -241,7 +242,7 @@ async function fetchPlanningFallbackUpcoming(fetchPlanningTimetableFromRpc, jar,
     apiStatus: 200,
     cache: 'fallback-rpc',
     sessionCache: null,
-    source: PLANNING_UPCOMING_SOURCE,
+    source,
   }
 }
 
@@ -249,6 +250,8 @@ export function createAdeUpcomingResolver({
   fetchAdeUpcomingFromApi,
   fetchPlanningTreeFromRpc,
   fetchPlanningTimetableFromRpc,
+  campusSource = DEFAULT_CAMPUS_UPCOMING_SOURCE,
+  planningSource = DEFAULT_PLANNING_UPCOMING_SOURCE,
 }) {
   async function resolveAdeUpcoming(jar, credentials, {
     date,
@@ -314,12 +317,12 @@ export function createAdeUpcomingResolver({
     ) {
       return {
         ...recoveredCampusResult,
-        source: CAMPUS_UPCOMING_SOURCE,
+        source: campusSource,
         nextEvent: recoveredCampusNextEvent,
         fallback: {
           used: true,
           reason: 'selection-label-recovered',
-          primarySource: CAMPUS_UPCOMING_SOURCE,
+          primarySource: campusSource,
           primaryError: null,
         },
       }
@@ -344,6 +347,7 @@ export function createAdeUpcomingResolver({
           resourceIds,
           selectionLabels,
           cacheScope,
+          source: planningSource,
         })
       } catch (error) {
         fallbackError = error
@@ -368,7 +372,7 @@ export function createAdeUpcomingResolver({
         fallback: {
           used: true,
           reason: fallbackReason,
-          primarySource: CAMPUS_UPCOMING_SOURCE,
+          primarySource: campusSource,
           primaryError: primaryError instanceof Error ? primaryError.message : null,
         },
       }
@@ -377,7 +381,7 @@ export function createAdeUpcomingResolver({
     if (primaryResult) {
       return {
         ...primaryResult,
-        source: CAMPUS_UPCOMING_SOURCE,
+        source: campusSource,
         nextEvent: primaryNextEvent,
         fallback: fallbackReason
           ? {
@@ -402,7 +406,7 @@ export function createAdeUpcomingResolver({
         fallback: {
           used: true,
           reason: fallbackReason ?? 'campus-error',
-          primarySource: CAMPUS_UPCOMING_SOURCE,
+          primarySource: campusSource,
           primaryError: primaryError instanceof Error ? primaryError.message : null,
         },
       }

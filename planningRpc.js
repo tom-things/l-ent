@@ -1249,16 +1249,21 @@ export function createPlanningRpcClient({
 
   async function initializePlanningRpcContext(jar) {
     const clientId = gwtClientId
-    const {
-      permutations,
-      serializationPolicies,
-    } = await getPlanningRpcMetadata(jar)
     const acceptHeader = 'text/html,application/xhtml+xml,*/*'
     const casLoginUrl = `${casOrigin}/login?service=${encodeURIComponent(serviceUrl)}`
     const casResult = await followRedirectChain(casLoginUrl, jar, {
       headers: { Accept: acceptHeader },
     })
     await casResult.response.text()
+
+    // ADE 2026 protects the GWT bootstrap as well as the RPC endpoints. Fetch
+    // its live permutation and serialization policies only after CAS has
+    // established the /direct session; otherwise the response is the CAS
+    // login page and the client silently falls back to obsolete hashes.
+    const {
+      permutations,
+      serializationPolicies,
+    } = await getPlanningRpcMetadata(jar)
 
     const loginResult = await postPlanningRpc(jar, 'MyPlanningClientServiceProxy', permutations.myPlanning, buildPlanningLoginBody(moduleBase, clientId, serializationPolicies.myPlanning))
     ensurePlanningRpcOk(loginResult, 'Planning login')

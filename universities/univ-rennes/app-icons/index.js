@@ -25,6 +25,7 @@ import oriOai from './ori-oai.png'
 import portailTheses from './portail-theses.png'
 import stages from './stages.png'
 import teleformationUnjf from './teleformation-unjf.png'
+import iutlanNotes9 from './iutlan-notes9.png'
 import sesame from './sesame.png'
 import rechercheUniversitaire from './recherche-universitaire.png'
 import loxya from './loxya.png'
@@ -59,6 +60,7 @@ const APP_ICONS = {
   'création de modules auto-formatifs interactifs': creationModules,
   'téléformation unjf': teleformationUnjf,
   'documentation des services numériques': documentationServices,
+  'notes iut lannion': iutlanNotes9,
   'sésame': sesame,
   'sesame': sesame,
   'sésame - comptes et données personnelles': sesame,
